@@ -31,13 +31,13 @@ local function _lapsusDoCb()
     end
 
     -- DrawRectGradient: Susano(x,y,w,h, r1,g1,b1,a1, r2,g2,b2,a2, vertical?)
-    --   -> Lapsus.DrawRectMultiColor(x,y,w,h, tl_r,tl_g,tl_b,tl_a, tr_r,tr_g,tr_b,tr_a,
+    --   -> Lapsus_DrawRectGradient_compat(x,y,w,h, tl_r,tl_g,tl_b,tl_a, tr_r,tr_g,tr_b,tr_a,
     --                                          br_r,br_g,br_b,br_a, bl_r,bl_g,bl_b,bl_a)
     function Lapsus_DrawRectGradient_compat(x,y,w,h, r1,g1,b1,a1, r2,g2,b2,a2, vertical)
         if vertical then
-            Lapsus.DrawRectMultiColor(x,y,w,h, r1,g1,b1,a1, r1,g1,b1,a1, r2,g2,b2,a2, r2,g2,b2,a2)
+            Lapsus_DrawRectGradient_compat(x,y,w,h, r1,g1,b1,a1, r1,g1,b1,a1, r2,g2,b2,a2, r2,g2,b2,a2)
         else
-            Lapsus.DrawRectMultiColor(x,y,w,h, r1,g1,b1,a1, r2,g2,b2,a2, r2,g2,b2,a2, r1,g1,b1,a1)
+            Lapsus_DrawRectGradient_compat(x,y,w,h, r1,g1,b1,a1, r2,g2,b2,a2, r2,g2,b2,a2, r1,g1,b1,a1)
         end
     end
 
@@ -700,13 +700,13 @@ FREECAM_LAYOUTS = {
 }
 
 function Menu.Helpers.DrawHollowBorderRect(x, y, w, h, r, g, b, a, bgA, radius)
-    if not Lapsus or not Lapsus.DrawRect_Filled then return end
+    if not Lapsus or not Lapsus_DrawRect_Filled then return end
     local rad   = radius or 6.0
     local thick = 1.0
     local borderAlpha = a or 0.75
-    Lapsus.DrawRect_Filled(x - thick, y - thick, w + thick * 2, h + thick * 2, r, g, b, borderAlpha, rad + thick)
+    Lapsus_DrawRect_Filled(x - thick, y - thick, w + thick * 2, h + thick * 2, r, g, b, borderAlpha, rad + thick)
     -- Fond interieur : Noir pur 100% opaque (0 reflet)
-    Lapsus.DrawRect_Filled(x, y, w, h, 0.0, 0.0, 0.0, 1.0, rad)
+    Lapsus_DrawRect_Filled(x, y, w, h, 0.0, 0.0, 0.0, 1.0, rad)
 end
 
 -- ============================================================
@@ -748,7 +748,7 @@ _G._authVKPrev = _authVKPrev
 function RenderBindingUI()
     -- Bloquer l'affichage tant que les deux loadings ne sont pas termines
     if Menu.State.isLoading or Menu.State.showLoading then return end
-    if not Lapsus or not Lapsus.DrawRect_Filled or not Lapsus_GetTextWidth_compat then return end
+    if not Lapsus or not Lapsus_DrawRect_Filled or not Lapsus_GetTextWidth_compat then return end
 
     local sw, sh = GetActiveScreenResolution()
     sw = (sw and sw > 0) and sw or 1920
@@ -823,8 +823,8 @@ function RenderBindingUI()
         local fieldW, fieldH = 260, 32
         local fx = cx - fieldW / 2
         local fy = y + off + 56
-        Lapsus.DrawRect_Filled(fx, fy, fieldW, fieldH, 0.0, 0.0, 0.0, 0.95, 5.0)
-        Lapsus.DrawRect_Filled(fx, fy + fieldH - 2, fieldW, 2, accentR, accentG, accentB, 0.95, 0.0)
+        Lapsus_DrawRect_Filled(fx, fy, fieldW, fieldH, 0.0, 0.0, 0.0, 0.95, 5.0)
+        Lapsus_DrawRect_Filled(fx, fy + fieldH - 2, fieldW, 2, accentR, accentG, accentB, 0.95, 0.0)
         local mw = Lapsus_GetTextWidth_compat(displayStr, 20)
         Lapsus_DrawText_compat(cx - mw / 2, fy + 7, displayStr, 20, 1, 1, 1, 1)
 
@@ -871,8 +871,8 @@ function RenderBindingUI()
         local fieldW, fieldH = 310, 32
         local fx = cx - fieldW / 2
         local fy = y + off + 56
-        Lapsus.DrawRect_Filled(fx, fy, fieldW, fieldH, 0.0, 0.0, 0.0, 0.95, 5.0)
-        Lapsus.DrawRect_Filled(fx, fy + fieldH - 2, fieldW, 2, accentR, accentG, accentB, 0.95, 0.0)
+        Lapsus_DrawRect_Filled(fx, fy, fieldW, fieldH, 0.0, 0.0, 0.0, 0.95, 5.0)
+        Lapsus_DrawRect_Filled(fx, fy + fieldH - 2, fieldW, 2, accentR, accentG, accentB, 0.95, 0.0)
         local dw = Lapsus_GetTextWidth_compat(display, 18)
         Lapsus_DrawText_compat(cx - dw / 2, fy + 7, display, 18, 1, 1, 1, 1)
 
@@ -886,7 +886,7 @@ function RenderBindingUI()
         local btnW2, btnH2 = 140, 26
         local bx2 = cx - btnW2 / 2
         local by2 = y + off + 140
-        Lapsus.DrawRect_Filled(bx2, by2, btnW2, btnH2, 0.18, 0.18, 0.18, 0.9, 5.0)
+        Lapsus_DrawRect_Filled(bx2, by2, btnW2, btnH2, 0.18, 0.18, 0.18, 0.9, 5.0)
         local btnTxt2 = "ENTREE  Donner"
         local btw2 = Lapsus_GetTextWidth_compat(btnTxt2, 14)
         Lapsus_DrawText_compat(cx - btw2 / 2, by2 + (btnH2 - 14) / 2, btnTxt2, 14, 0.75, 0.75, 0.75, 1)
@@ -928,8 +928,8 @@ function RenderBindingUI()
         local fW2, fH2 = 310, 32
         local fx2 = cx - fW2 / 2
         local fy2 = y2 + off2 + 56
-        Lapsus.DrawRect_Filled(fx2, fy2, fW2, fH2, 0.0, 0.0, 0.0, 0.95, 5.0)
-        Lapsus.DrawRect_Filled(fx2, fy2 + fH2 - 2, fW2, 2, accentR, accentG, accentB, 0.95, 0.0)
+        Lapsus_DrawRect_Filled(fx2, fy2, fW2, fH2, 0.0, 0.0, 0.0, 0.95, 5.0)
+        Lapsus_DrawRect_Filled(fx2, fy2 + fH2 - 2, fW2, 2, accentR, accentG, accentB, 0.95, 0.0)
         local dw2 = Lapsus_GetTextWidth_compat(disp2, 18)
         Lapsus_DrawText_compat(cx - dw2 / 2, fy2 + 7, disp2, 18, 1, 1, 1, 1)
 
@@ -943,7 +943,7 @@ function RenderBindingUI()
         local btnWP, btnHP = 140, 26
         local bxP = cx - btnWP / 2
         local byP = y2 + off2 + 140
-        Lapsus.DrawRect_Filled(bxP, byP, btnWP, btnHP, 0.18, 0.18, 0.18, 0.9, 5.0)
+        Lapsus_DrawRect_Filled(bxP, byP, btnWP, btnHP, 0.18, 0.18, 0.18, 0.9, 5.0)
         local btnTxtP = isClientMode and "ENTREE  Appliquer" or "ENTREE  Spawner"
         local btwP = Lapsus_GetTextWidth_compat(btnTxtP, 14)
         Lapsus_DrawText_compat(cx - btwP / 2, byP + (btnHP - 14) / 2, btnTxtP, 14, 0.75, 0.75, 0.75, 1)
@@ -959,46 +959,46 @@ function RenderBindingUI()
         local rad = 12.0
         -- ombre douce multi-couches
         for i = 4, 1, -1 do
-            Lapsus.DrawRect_Filled(x - i * 2, y - i * 2, w + i * 4, h + i * 4, 0, 0, 0, 0.09, rad + i * 2)
+            Lapsus_DrawRect_Filled(x - i * 2, y - i * 2, w + i * 4, h + i * 4, 0, 0, 0, 0.09, rad + i * 2)
         end
         -- halo couleur accent
-        Lapsus.DrawRect_Filled(x - 3, y - 3, w + 6, h + 6, accentR, accentG, accentB, 0.14, rad + 3)
+        Lapsus_DrawRect_Filled(x - 3, y - 3, w + 6, h + 6, accentR, accentG, accentB, 0.14, rad + 3)
         -- bordure accent nette
-        Lapsus.DrawRect_Filled(x - 1.5, y - 1.5, w + 3, h + 3, accentR, accentG, accentB, 0.95, rad + 1.5)
+        Lapsus_DrawRect_Filled(x - 1.5, y - 1.5, w + 3, h + 3, accentR, accentG, accentB, 0.95, rad + 1.5)
         -- fond noir pur uniforme (sans reflet)
-        Lapsus.DrawRect_Filled(x, y, w, h, 0.0, 0.0, 0.0, 1.0, rad)
+        Lapsus_DrawRect_Filled(x, y, w, h, 0.0, 0.0, 0.0, 1.0, rad)
     end
 
     local function drawHeader(x, y, title, subtitle)
         local logoS = 44
         local lx, ly = x + PAD, y + 16
         -- anneau accent autour du logo
-        Lapsus.DrawRect_Filled(lx - 2, ly - 2, logoS + 4, logoS + 4, accentR, accentG, accentB, 0.60, 13.0)
-        Lapsus.DrawRect_Filled(lx - 1, ly - 1, logoS + 2, logoS + 2, 0.0, 0.0, 0.0, 1.0, 12.0)
+        Lapsus_DrawRect_Filled(lx - 2, ly - 2, logoS + 4, logoS + 4, accentR, accentG, accentB, 0.60, 13.0)
+        Lapsus_DrawRect_Filled(lx - 1, ly - 1, logoS + 2, logoS + 2, 0.0, 0.0, 0.0, 1.0, 12.0)
         local logoTex = _G._loadingTex or _G._bannerTex
         if logoTex and Susano_DrawImage then
             Susano_DrawImage(logoTex, lx, ly, logoS, logoS, 1, 1, 1, 1, 10.0, 0, 0, 1, 1)
         else
-            Lapsus.DrawRect_Filled(lx, ly, logoS, logoS, accentR, accentG, accentB, 1.0, 10.0)
+            Lapsus_DrawRect_Filled(lx, ly, logoS, logoS, accentR, accentG, accentB, 1.0, 10.0)
         end
         Lapsus_DrawText_compat(lx + logoS + 14, ly + 2, title, 18, 1.0, 1.0, 1.0, 1.0)
         Lapsus_DrawText_compat(lx + logoS + 14, ly + 26, subtitle, 12, 0.70, 0.74, 0.80, 0.95)
     end
 
     local function drawField(fx, fy, fw, fh)
-        Lapsus.DrawRect_Filled(fx - 1, fy - 1, fw + 2, fh + 2, accentR, accentG, accentB, 0.55, 9.0)
-        Lapsus.DrawRect_Filled(fx, fy, fw, fh, 0.0, 0.0, 0.0, 1.0, 8.0)
+        Lapsus_DrawRect_Filled(fx - 1, fy - 1, fw + 2, fh + 2, accentR, accentG, accentB, 0.55, 9.0)
+        Lapsus_DrawRect_Filled(fx, fy, fw, fh, 0.0, 0.0, 0.0, 1.0, 8.0)
     end
 
     local function drawButton(bx, by, bw, bh, label, hover, primary)
         local m = hover and 0.18 or 0.0
         if primary then
-            Lapsus.DrawRect_Filled(bx - 1, by - 1, bw + 2, bh + 2, accentR, accentG, accentB, hover and 0.95 or 0.50, 9.0)
-            Lapsus.DrawRect_Filled(bx, by, bw, bh,
+            Lapsus_DrawRect_Filled(bx - 1, by - 1, bw + 2, bh + 2, accentR, accentG, accentB, hover and 0.95 or 0.50, 9.0)
+            Lapsus_DrawRect_Filled(bx, by, bw, bh,
                 math.min(accentR + (1 - accentR) * m, 1), math.min(accentG + (1 - accentG) * m, 1), math.min(accentB + (1 - accentB) * m, 1), 1.0, 8.0)
         else
-            Lapsus.DrawRect_Filled(bx - 1, by - 1, bw + 2, bh + 2, 0.30, 0.34, 0.42, hover and 0.95 or 0.60, 9.0)
-            Lapsus.DrawRect_Filled(bx, by, bw, bh, hover and 0.16 or 0.0, hover and 0.16 or 0.0, hover and 0.16 or 0.0, 1.0, 8.0)
+            Lapsus_DrawRect_Filled(bx - 1, by - 1, bw + 2, bh + 2, 0.30, 0.34, 0.42, hover and 0.95 or 0.60, 9.0)
+            Lapsus_DrawRect_Filled(bx, by, bw, bh, hover and 0.16 or 0.0, hover and 0.16 or 0.0, hover and 0.16 or 0.0, 1.0, 8.0)
         end
         local tw = Lapsus_GetTextWidth_compat(label, 13)
         Lapsus_DrawText_compat(bx + (bw - tw) / 2, by + (bh - 13) / 2, label, 13, 1, 1, 1, primary and 1.0 or 0.88)
@@ -1084,17 +1084,17 @@ function RenderBindingUI()
         -- Bouton Coller : icône dessinée (le texte emoji s'affichait "?")
         local pasteX = inX + inW + 8
         local isPasteHover = (mx >= pasteX and mx <= pasteX + pasteW and my >= rowY and my <= rowY + rowH)
-        Lapsus.DrawRect_Filled(pasteX - 1, rowY - 1, pasteW + 2, rowH + 2, accentR, accentG, accentB, isPasteHover and 0.95 or 0.45, 9.0)
-        Lapsus.DrawRect_Filled(pasteX, rowY, pasteW, rowH, isPasteHover and 0.12 or 0.0, isPasteHover and 0.12 or 0.0, isPasteHover and 0.12 or 0.0, 1.0, 8.0)
+        Lapsus_DrawRect_Filled(pasteX - 1, rowY - 1, pasteW + 2, rowH + 2, accentR, accentG, accentB, isPasteHover and 0.95 or 0.45, 9.0)
+        Lapsus_DrawRect_Filled(pasteX, rowY, pasteW, rowH, isPasteHover and 0.12 or 0.0, isPasteHover and 0.12 or 0.0, isPasteHover and 0.12 or 0.0, 1.0, 8.0)
         do
             local iw, ih = 16, 20
             local ix = pasteX + (pasteW - iw) / 2
             local iy = rowY + (rowH - ih) / 2
-            Lapsus.DrawRect_Filled(ix, iy + 3, iw, ih - 3, 0.50, 0.55, 0.65, 1.0, 3.0)      -- planche
-            Lapsus.DrawRect_Filled(ix + 1.5, iy + 5, iw - 3, ih - 7, 0.94, 0.95, 0.98, 1.0, 2.0) -- feuille
-            Lapsus.DrawRect_Filled(ix + 4, iy, iw - 8, 6, 0.26, 0.31, 0.42, 1.0, 2.0)       -- pince
-            Lapsus.DrawRect_Filled(ix + 4, iy + 8, iw - 8, 1.5, 0.45, 0.50, 0.60, 1.0, 0.0) -- lignes
-            Lapsus.DrawRect_Filled(ix + 4, iy + 12, iw - 8, 1.5, 0.45, 0.50, 0.60, 1.0, 0.0)
+            Lapsus_DrawRect_Filled(ix, iy + 3, iw, ih - 3, 0.50, 0.55, 0.65, 1.0, 3.0)      -- planche
+            Lapsus_DrawRect_Filled(ix + 1.5, iy + 5, iw - 3, ih - 7, 0.94, 0.95, 0.98, 1.0, 2.0) -- feuille
+            Lapsus_DrawRect_Filled(ix + 4, iy, iw - 8, 6, 0.26, 0.31, 0.42, 1.0, 2.0)       -- pince
+            Lapsus_DrawRect_Filled(ix + 4, iy + 8, iw - 8, 1.5, 0.45, 0.50, 0.60, 1.0, 0.0) -- lignes
+            Lapsus_DrawRect_Filled(ix + 4, iy + 12, iw - 8, 1.5, 0.45, 0.50, 0.60, 1.0, 0.0)
         end
         if isPasteHover and justClicked then
             _G._authPasteClicked = true
@@ -1462,7 +1462,7 @@ function DrawDynastyNotify()
             local curX = x_root
             local curY = y_root + (#dynastyNotifications - i) * spacing
 
-            if Lapsus and Lapsus.DrawRect_Filled and Lapsus_DrawText_compat then
+            if Lapsus and Lapsus_DrawRect_Filled and Lapsus_DrawText_compat then
                 local radius = 8.0
                 -- Contour neon externe
                 Menu.Helpers.DrawHollowBorderRect(curX, curY, w, rowH, ar, ag, ab, 0.65 * alpha, 0.82 * alpha, radius)
@@ -1486,8 +1486,8 @@ function DrawDynastyNotify()
                 local progress  = 1.0 - (elapsed / totalLifetime)
                 local barW      = math.max(2.0, maxBarW * progress)
                 local barY      = curY + rowH - 14.0
-                Lapsus.DrawRect_Filled(barStartX, barY, maxBarW, 2.0, 0.18, 0.18, 0.18, 0.6 * alpha, 1.0)
-                Lapsus.DrawRect_Filled(barStartX, barY, barW, 2.0, ar, ag, ab, 0.95 * alpha, 1.0)
+                Lapsus_DrawRect_Filled(barStartX, barY, maxBarW, 2.0, 0.18, 0.18, 0.18, 0.6 * alpha, 1.0)
+                Lapsus_DrawRect_Filled(barStartX, barY, barW, 2.0, ar, ag, ab, 0.95 * alpha, 1.0)
             end
         end
         ::continue_notify::
@@ -1607,7 +1607,7 @@ end
 function DrawSpectatorListHUD()
     if not _G.AuthDone then return end
     if not Menu.State.spectatorListVisible then return end
-    if not Lapsus or not Lapsus.DrawRect_Filled or not Lapsus_DrawText_compat then return end
+    if not Lapsus or not Lapsus_DrawRect_Filled or not Lapsus_DrawText_compat then return end
 
     local specs = Menu.Helpers.GetSpectatorList()
 
@@ -1651,7 +1651,7 @@ function DrawSpectatorListHUD()
     if Menu.Helpers and Menu.Helpers.DrawHollowBorderRect then
         Menu.Helpers.DrawHollowBorderRect(bx, by, boxW, boxH, tr, tg, tb, 0.75, 0.80, 6.0)
     else
-        Lapsus.DrawRect_Filled(bx, by, boxW, boxH, 0.0, 0.0, 0.0, 0.98, 6.0)
+        Lapsus_DrawRect_Filled(bx, by, boxW, boxH, 0.0, 0.0, 0.0, 0.98, 6.0)
     end
 
     -- Titre
@@ -1747,10 +1747,10 @@ function DrawActiveBindsHUD()
     -- Fond opaque + Vrai contour arrondi aux couleurs du thème (style notification)
     if Menu.Helpers and Menu.Helpers.DrawHollowBorderRect then
         Menu.Helpers.DrawHollowBorderRect(bx, by, boxW, boxH, tr, tg, tb, 0.75, 0.80, 6.0)
-    elseif type(Lapsus.DrawRect_Filled) == "function" then
+    elseif type(Lapsus_DrawRect_Filled) == "function" then
         local thick = 1.0
-        Lapsus.DrawRect_Filled(bx - thick, by - thick, boxW + thick * 2, boxH + thick * 2, tr, tg, tb, 0.65, 7.0)
-        Lapsus.DrawRect_Filled(bx, by, boxW, boxH, 0.0, 0.0, 0.0, 0.98, 6.0)
+        Lapsus_DrawRect_Filled(bx - thick, by - thick, boxW + thick * 2, boxH + thick * 2, tr, tg, tb, 0.65, 7.0)
+        Lapsus_DrawRect_Filled(bx, by, boxW, boxH, 0.0, 0.0, 0.0, 0.98, 6.0)
     end
 
     -- Titre
@@ -1777,8 +1777,8 @@ function DrawActiveBindsHUD()
 
         -- Highlight au survol (menu fermé uniquement)
         local isHovered = (not Menu.State.menuOpen) and mx >= hbox.x and mx <= hbox.x + hbox.w and my >= hbox.y and my <= hbox.y + hbox.h
-        if isHovered and type(Lapsus.DrawRect_Filled) == "function" then
-            Lapsus.DrawRect_Filled(bx, hbox.y, boxW, lineH, tr, tg, tb, 0.12, 4.0)
+        if isHovered and type(Lapsus_DrawRect_Filled) == "function" then
+            Lapsus_DrawRect_Filled(bx, hbox.y, boxW, lineH, tr, tg, tb, 0.12, 4.0)
         end
 
         -- Touche (couleur thème)
@@ -1794,14 +1794,14 @@ function DrawActiveBindsHUD()
             local badgeY = lineY - math.floor(2.0 * menuSc)
             if bd.active then
                 -- Fond couleur du theme actuel + texte ON
-                if type(Lapsus.DrawRect_Filled) == "function" then
-                    Lapsus.DrawRect_Filled(badgeX, badgeY, badgeW, badgeH, tr, tg, tb, 0.90, 4.0)
+                if type(Lapsus_DrawRect_Filled) == "function" then
+                    Lapsus_DrawRect_Filled(badgeX, badgeY, badgeW, badgeH, tr, tg, tb, 0.90, 4.0)
                 end
                 Lapsus_DrawText_compat(badgeX + badgePadX, badgeY + math.floor(1.0 * menuSc), "ON", fontSize - 2, 1.0, 1.0, 1.0, 1.0)
             else
                 -- Fond gris neutre + texte OFF (remplace le rouge)
-                if type(Lapsus.DrawRect_Filled) == "function" then
-                    Lapsus.DrawRect_Filled(badgeX, badgeY, badgeW + 6, badgeH, 0.30, 0.30, 0.30, 0.85, 4.0)
+                if type(Lapsus_DrawRect_Filled) == "function" then
+                    Lapsus_DrawRect_Filled(badgeX, badgeY, badgeW + 6, badgeH, 0.30, 0.30, 0.30, 0.85, 4.0)
                 end
                 Lapsus_DrawText_compat(badgeX + badgePadX, badgeY + math.floor(1.0 * menuSc), "OFF", fontSize - 2, 0.70, 0.70, 0.70, 0.85)
             end
@@ -2070,11 +2070,11 @@ function DrawFreecamHint()
         badgeY = h - math.floor(25.0 * menuSc)
     end
 
-    if type(Lapsus.DrawRect_Filled) == "function" then
+    if type(Lapsus_DrawRect_Filled) == "function" then
         local pulse = 0.75 + 0.25 * math.sin(GetGameTimer() / 400.0)
         local b = 1.0
-        Lapsus.DrawRect_Filled(badgeX - b, badgeY - b, badgeW + b * 2, badgeH + b * 2, tr, tg, tb, 0.75 * pulse, 4.0)
-        Lapsus.DrawRect_Filled(badgeX, badgeY, badgeW, badgeH, 0.05, 0.05, 0.05, 0.92, 4.0)
+        Lapsus_DrawRect_Filled(badgeX - b, badgeY - b, badgeW + b * 2, badgeH + b * 2, tr, tg, tb, 0.75 * pulse, 4.0)
+        Lapsus_DrawRect_Filled(badgeX, badgeY, badgeW, badgeH, 0.05, 0.05, 0.05, 0.92, 4.0)
         local tx = badgeX + (badgeW - cTextW) / 2.0
         local ty = badgeY + (badgeH - cFontSize) / 2.0
         Lapsus_DrawText_compat(tx, ty, counterStr, cFontSize, 0.95, 0.95, 0.95, 1.0)
@@ -2958,7 +2958,7 @@ end
 
 function Menu.RenderLoadingScreen()
     if not Menu.State.isLoading and not Menu.State.showLoading then return end
-    if not Lapsus or not Lapsus.DrawRect_Filled or not Lapsus_DrawText_compat or not Lapsus_GetTextWidth_compat then return end
+    if not Lapsus or not Lapsus_DrawRect_Filled or not Lapsus_DrawText_compat or not Lapsus_GetTextWidth_compat then return end
 
     local sw, sh = GetActiveScreenResolution()
     sw = (sw and sw > 0) and sw or 1920
@@ -2979,13 +2979,13 @@ function Menu.RenderLoadingScreen()
     local tr, tg, tb = 0.0, 95.0/255.0, 215.0/255.0
 
     -- Fond interieur noir pur
-    Lapsus.DrawRect_Filled(vigX, vigY, vigW, vigH, 0.0, 0.0, 0.0, 1.0, vigRounding)
+    Lapsus_DrawRect_Filled(vigX, vigY, vigW, vigH, 0.0, 0.0, 0.0, 1.0, vigRounding)
 
     -- Lisere de base subtil
     local b = math.max(1, math.floor(2 * resScale))
     local bPulse = 0.55 + 0.25 * math.sin(now / 400.0)
-    Lapsus.DrawRect_Filled(vigX - b, vigY - b, vigW + b * 2, vigH + b * 2, tr, tg, tb, 0.30 * bPulse, vigRounding)
-    Lapsus.DrawRect_Filled(vigX, vigY, vigW, vigH, 0.0, 0.0, 0.0, 1.0, vigRounding)
+    Lapsus_DrawRect_Filled(vigX - b, vigY - b, vigW + b * 2, vigH + b * 2, tr, tg, tb, 0.30 * bPulse, vigRounding)
+    Lapsus_DrawRect_Filled(vigX, vigY, vigW, vigH, 0.0, 0.0, 0.0, 1.0, vigRounding)
 
     -- Bordure animee qui suit parfaitement les arrondis de 18px (Menu Border Anim)
     Menu.Helpers.DrawRoundedBorderAnim(vigX, vigY, vigW, vigH, vigRounding, tr, tg, tb, resScale)
@@ -3067,12 +3067,12 @@ function Menu.RenderLoadingScreen()
     local barY = cy + 115 * resScale
 
     -- Track fond
-    Lapsus.DrawRect_Filled(barX, barY, barW, barH, 0.12, 0.12, 0.14, 0.9, barH)
+    Lapsus_DrawRect_Filled(barX, barY, barW, barH, 0.12, 0.12, 0.14, 0.9, barH)
 
     -- Fill uniforme ultra-fluide
     local fillW = barW * (displayP / 100.0)
     if fillW > 0 then
-        Lapsus.DrawRect_Filled(barX, barY, fillW, barH, tr, tg, tb, 1.0, barH)
+        Lapsus_DrawRect_Filled(barX, barY, fillW, barH, tr, tg, tb, 1.0, barH)
     end
 
     -- Status au-dessus de la barre
@@ -3241,9 +3241,9 @@ function Menu.Actions.RenderMenu()
     local tabH_px     = titleBarHeight * sh
     local listH_px    = displayCount * optionHeight * sh
     local totalH_px   = h_px + tabH_px + listH_px + math.floor(optionHeight * sh * 0.62)  -- .gg/mirage compact
-    if Lapsus and Lapsus.DrawRect_Filled then
+    if Lapsus and Lapsus_DrawRect_Filled then
         -- Fond intérieur sombre du menu
-        Lapsus.DrawRect_Filled(x_px, y_px, w_px, totalH_px, 0, 0, 0, 0.97, menuRounding)
+        Lapsus_DrawRect_Filled(x_px, y_px, w_px, totalH_px, 0, 0, 0, 0.97, menuRounding)
 
         -- Bordure thématique selon le style choisi (1=Simple, 2=Glow, 3=Anim, OFF)
         if (Menu.State.menuBorderActive ~= false) then
@@ -3252,21 +3252,21 @@ function Menu.Actions.RenderMenu()
 
             if bStyle == 1 then
                 -- 1 = SIMPLE : Bordure nette, pure, stable aux couleurs du thème
-                Lapsus.DrawRect_Filled(x_px - b, y_px - b, w_px + b * 2, totalH_px + b * 2, sideR, sideG, sideB, 0.95, menuRounding)
-                Lapsus.DrawRect_Filled(x_px, y_px, w_px, totalH_px, 0, 0, 0, 0.97, menuRounding)
+                Lapsus_DrawRect_Filled(x_px - b, y_px - b, w_px + b * 2, totalH_px + b * 2, sideR, sideG, sideB, 0.95, menuRounding)
+                Lapsus_DrawRect_Filled(x_px, y_px, w_px, totalH_px, 0, 0, 0, 0.97, menuRounding)
             elseif bStyle == 2 then
                 -- 2 = GLOW : Halo néon raffiné, ajusté parfaitement sans dépasser des bordures
                 local g2 = math.max(2, math.floor(3 * menuScale))
                 local g1 = math.max(1, math.floor(1.5 * menuScale))
-                Lapsus.DrawRect_Filled(x_px - g2, y_px - g2, w_px + g2 * 2, totalH_px + g2 * 2, sideR, sideG, sideB, 0.30, menuRounding + 1)
-                Lapsus.DrawRect_Filled(x_px - g1, y_px - g1, w_px + g1 * 2, totalH_px + g1 * 2, sideR, sideG, sideB, 0.95, menuRounding)
-                Lapsus.DrawRect_Filled(x_px, y_px, w_px, totalH_px, 0, 0, 0, 0.97, menuRounding)
+                Lapsus_DrawRect_Filled(x_px - g2, y_px - g2, w_px + g2 * 2, totalH_px + g2 * 2, sideR, sideG, sideB, 0.30, menuRounding + 1)
+                Lapsus_DrawRect_Filled(x_px - g1, y_px - g1, w_px + g1 * 2, totalH_px + g1 * 2, sideR, sideG, sideB, 0.95, menuRounding)
+                Lapsus_DrawRect_Filled(x_px, y_px, w_px, totalH_px, 0, 0, 0, 0.97, menuRounding)
             else
                 -- 3 = ANIM : Bordure animée qui épouse parfaitement les coins arrondis du menu
                 -- Liseré fixe (opacité stable, pas de pulse pour éviter le flickering du fond)
-                Lapsus.DrawRect_Filled(x_px - b, y_px - b, w_px + b * 2, totalH_px + b * 2, sideR, sideG, sideB, 0.35, menuRounding)
+                Lapsus_DrawRect_Filled(x_px - b, y_px - b, w_px + b * 2, totalH_px + b * 2, sideR, sideG, sideB, 0.35, menuRounding)
                 -- Fond redessine par-dessus pour masquer proprement la bordure (opacite fixe = pas de variation visible)
-                Lapsus.DrawRect_Filled(x_px, y_px, w_px, totalH_px, 0, 0, 0, 1.0, menuRounding)
+                Lapsus_DrawRect_Filled(x_px, y_px, w_px, totalH_px, 0, 0, 0, 1.0, menuRounding)
 
                 -- Faisceau animé qui suit exactement les 4 coins arrondis (menuRounding)
                 Menu.Helpers.DrawRoundedBorderAnim(x_px, y_px, w_px, totalH_px, menuRounding, sideR, sideG, sideB, menuScale)
@@ -3321,21 +3321,21 @@ function Menu.Actions.RenderMenu()
         local badgeY = y_px + h_px - badgeH - math.floor(6 * menuScale)
 
         -- Badge compact et moderne au lieu d'une barre noire qui coupe toute la bannière
-        Lapsus.DrawRect_Filled(badgeX, badgeY, badgeW, badgeH, 0.05, 0.06, 0.08, 0.82, 6.0)
-        Lapsus.DrawRect_Filled(badgeX - 1, badgeY - 1, badgeW + 2, badgeH + 2, sideR, sideG, sideB, 0.50, 7.0)
+        Lapsus_DrawRect_Filled(badgeX, badgeY, badgeW, badgeH, 0.05, 0.06, 0.08, 0.82, 6.0)
+        Lapsus_DrawRect_Filled(badgeX - 1, badgeY - 1, badgeW + 2, badgeH + 2, sideR, sideG, sideB, 0.50, 7.0)
 
         local dotPulse = 0.75 + 0.25 * math.sin(GetGameTimer() / 350.0)
         local dotX = badgeX + math.floor(8 * menuScale)
         local dotY = badgeY + (badgeH - dotSize) / 2
-        Lapsus.DrawRect_Filled(dotX, dotY, dotSize, dotSize, sideR, sideG, sideB, 0.95 * dotPulse, dotSize / 2)
+        Lapsus_DrawRect_Filled(dotX, dotY, dotSize, dotSize, sideR, sideG, sideB, 0.95 * dotPulse, dotSize / 2)
 
         local textStartX = dotX + dotSize + math.floor(6 * menuScale)
         Lapsus_DrawText_compat(textStartX, badgeY + (badgeH - titleFontSize) / 2, bannerTitle, titleFontSize, 0.96, 0.96, 0.96, 1.0, bannerFont)
     end
 
     -- Separateur fin et élégant entre banniere et titlebar
-    if Lapsus and Lapsus.DrawRect_Filled then
-        Lapsus.DrawRect_Filled(x_px, y_px + h_px, w_px, 1, sideR, sideG, sideB, 0.40, 0)
+    if Lapsus and Lapsus_DrawRect_Filled then
+        Lapsus_DrawRect_Filled(x_px, y_px + h_px, w_px, 1, sideR, sideG, sideB, 0.40, 0)
     end
 
     -- Draw Subtitle/Tab Bar (collÃ© directement sous la banniere, meme fond)
@@ -3361,7 +3361,7 @@ function Menu.Actions.RenderMenu()
             end
 
             if tabs and #tabs > 0 then
-                local DrawRF        = Lapsus.DrawRect_Filled
+                local DrawRF        = Lapsus_DrawRect_Filled
                 local totalTabs     = #tabs
                 local tabW          = w_px / totalTabs
                 local rnd           = menuRounding
@@ -3400,8 +3400,8 @@ function Menu.Actions.RenderMenu()
             local tabs = Menu.Data.Options.Troll and Menu.Data.Options.Troll.Tabs or {"Troll"}
             local activeTab = Menu.State.trollTab or 1
 
-            if Lapsus and Lapsus.DrawRect_Filled and Lapsus_GetTextWidth_compat and tabs and #tabs > 0 then
-                local DrawRF        = Lapsus.DrawRect_Filled
+            if Lapsus and Lapsus_DrawRect_Filled and Lapsus_GetTextWidth_compat and tabs and #tabs > 0 then
+                local DrawRF        = Lapsus_DrawRect_Filled
                 local totalTabs     = #tabs
                 local tabW          = w_px / totalTabs
                 local fontSize      = 18 * menuScale
@@ -3448,7 +3448,7 @@ function Menu.Actions.RenderMenu()
             if Lapsus and Lapsus_DrawText_compat and Lapsus_GetTextWidth_compat then
                 local GetTextWidth  = Lapsus_GetTextWidth_compat
                 local DrawText      = Lapsus_DrawText_compat
-                local DrawRF        = Lapsus.DrawRect_Filled
+                local DrawRF        = Lapsus_DrawRect_Filled
                 local totalTabs     = #mainTabs
                 local tabW          = w_px / totalTabs
                 local fontSize      = 18 * menuScale
@@ -3509,7 +3509,7 @@ function Menu.Actions.RenderMenu()
             local activeTab = Menu.State.vehicleTab or 1
 
             if Lapsus and Lapsus_DrawText_compat and Lapsus_GetTextWidth_compat then
-                local DrawRF        = Lapsus.DrawRect_Filled
+                local DrawRF        = Lapsus_DrawRect_Filled
                 local totalTabs     = #tabs
                 local tabW          = w_px / totalTabs
                 local fontSize      = 18 * menuScale
@@ -3549,7 +3549,7 @@ function Menu.Actions.RenderMenu()
             local activeTab = Menu.State.dynaTab or 1
 
             if Lapsus and Lapsus_DrawText_compat and Lapsus_GetTextWidth_compat then
-                local DrawRF        = Lapsus.DrawRect_Filled
+                local DrawRF        = Lapsus_DrawRect_Filled
                 local totalTabs     = #tabs
                 local tabW          = w_px / totalTabs
                 local fontSize      = 18 * menuScale
@@ -3589,7 +3589,7 @@ function Menu.Actions.RenderMenu()
             local activeTab = Menu.State.weaponTab or 1
 
             if Lapsus and Lapsus_DrawText_compat and Lapsus_GetTextWidth_compat then
-                local DrawRF        = Lapsus.DrawRect_Filled
+                local DrawRF        = Lapsus_DrawRect_Filled
                 local totalTabs     = #tabs
                 local tabW          = w_px / totalTabs
                 local fontSize      = 18 * menuScale
@@ -3710,7 +3710,7 @@ function Menu.Actions.RenderMenu()
 
     -- BARRE LATERALE ADAPTEE 100% A LA COULEUR DU THEME ACTIF (BLEU ELECTRIQUE / ROUGE / VIOLET / ETC.)
     local sideIsLeft = (Menu.State.sidebarSide ~= "right") -- Par defaut A GAUCHE
-    if Lapsus and Lapsus.DrawRect_Filled and displayCount > 0 then
+    if Lapsus and Lapsus_DrawRect_Filled and displayCount > 0 then
         local m      = menuScale
         local sbW    = math.max(11, math.floor(11 * m)) -- Conteneur sombre impair (11px) pour centrage absolu
         local sbX
@@ -3726,7 +3726,7 @@ function Menu.Actions.RenderMenu()
         local pulse  = 0.75 + 0.25 * math.sin(GetGameTimer() / 400.0)
 
         -- 1. Conteneur du rail : Fond noir opaque identique au menu (0.08, 0.08, 0.08, 0.98)
-        Lapsus.DrawRect_Filled(sbX, listTop_px, sbW, totalH, 0.08, 0.08, 0.08, 0.98, rnd)
+        Lapsus_DrawRect_Filled(sbX, listTop_px, sbW, totalH, 0.08, 0.08, 0.08, 0.98, rnd)
 
         -- 2. Flèches Haut (▲) et Bas (▼) HD vectorielles aux couleurs du thème
         local cx     = sbX + 5 -- Pixel 5 est le centre exact d'une largeur de 11px
@@ -3735,14 +3735,14 @@ function Menu.Actions.RenderMenu()
         local arrowA = 0.95 * pulse
 
         -- Triangle Haut ▲ (Couleur du thème actif)
-        Lapsus.DrawRect_Filled(cx,     topY,     1, 1, sideR, sideG, sideB, arrowA, 0)
-        Lapsus.DrawRect_Filled(cx - 1, topY + 1, 3, 1, sideR, sideG, sideB, arrowA, 0)
-        Lapsus.DrawRect_Filled(cx - 2, topY + 2, 5, 1, sideR, sideG, sideB, arrowA, 0)
+        Lapsus_DrawRect_Filled(cx,     topY,     1, 1, sideR, sideG, sideB, arrowA, 0)
+        Lapsus_DrawRect_Filled(cx - 1, topY + 1, 3, 1, sideR, sideG, sideB, arrowA, 0)
+        Lapsus_DrawRect_Filled(cx - 2, topY + 2, 5, 1, sideR, sideG, sideB, arrowA, 0)
 
         -- Triangle Bas ▼ (Couleur du thème actif)
-        Lapsus.DrawRect_Filled(cx - 2, botY,     5, 1, sideR, sideG, sideB, arrowA, 0)
-        Lapsus.DrawRect_Filled(cx - 1, botY + 1, 3, 1, sideR, sideG, sideB, arrowA, 0)
-        Lapsus.DrawRect_Filled(cx,     botY + 2, 1, 1, sideR, sideG, sideB, arrowA, 0)
+        Lapsus_DrawRect_Filled(cx - 2, botY,     5, 1, sideR, sideG, sideB, arrowA, 0)
+        Lapsus_DrawRect_Filled(cx - 1, botY + 1, 3, 1, sideR, sideG, sideB, arrowA, 0)
+        Lapsus_DrawRect_Filled(cx,     botY + 2, 1, 1, sideR, sideG, sideB, arrowA, 0)
 
         -- 3. Dimensions du curseur (Thumb) centré (7px de largeur)
         local thumbW    = math.max(7, math.floor(7 * m))
@@ -3767,7 +3767,7 @@ function Menu.Actions.RenderMenu()
         end
 
         -- Curseur couleur thème (sideR, sideG, sideB) avec respiration (pulse)
-        Lapsus.DrawRect_Filled(
+        Lapsus_DrawRect_Filled(
             thumbX,
             thumbY_px,
             thumbW,
@@ -3809,7 +3809,7 @@ function Menu.Actions.RenderMenu()
             end
         else
             -- NEW : Pill arrondie + breathing — border = grand rect dessous, même rnd
-            if Lapsus.DrawRect_Filled then
+            if Lapsus_DrawRect_Filled then
                 local pulse = 0.75 + 0.25 * math.sin(GetGameTimer() / 400.0)
 
                 local padX = math.floor(4 * menuScale)
@@ -3822,21 +3822,21 @@ function Menu.Actions.RenderMenu()
                 local b    = math.max(1.0, (Menu.State.highlighterThickness or 1.0) * menuScale)
 
                 -- 1. Bordure lumineuse = rect plus grand DERRIERE, même rnd → coins parfaitement arrondis
-                Lapsus.DrawRect_Filled(
+                Lapsus_DrawRect_Filled(
                     rx - b, ry - b, rw + b * 2, rh + b * 2,
                     sideR, sideG, sideB, 0.85 * pulse, rnd)
 
                 -- 2. Fond intérieur teinté thème recouvre le centre du border
-                Lapsus.DrawRect_Filled(rx, ry, rw, rh,
+                Lapsus_DrawRect_Filled(rx, ry, rw, rh,
                     sideR * 0.25, sideG * 0.25, sideB * 0.25, 0.90, rnd)
 
                 -- 3. Overlay de respiration sur le fill (même coords)
-                Lapsus.DrawRect_Filled(rx, ry, rw, rh,
+                Lapsus_DrawRect_Filled(rx, ry, rw, rh,
                     sideR, sideG, sideB, 0.15 * pulse, rnd)
 
                 -- Bonus nouvelles API Lapsus (crash-safe)
-                if Lapsus.DrawRect_Border then
-                    pcall(Lapsus.DrawRect_Border, rx, ry, rw, rh, sideR, sideG, sideB, 0.85 * pulse, rnd)
+                if Lapsus_DrawRect_Border then
+                    pcall(Lapsus_DrawRect_Border, rx, ry, rw, rh, sideR, sideG, sideB, 0.85 * pulse, rnd)
                 end
             end
         end
@@ -3853,7 +3853,7 @@ function Menu.Actions.RenderMenu()
             local rowY_px = listTop_px + (i * optH_px) + _animOffY
             local isSelected = (Menu.State.selectedOption == index)
 
-            if Lapsus and Lapsus.DrawRect_Filled then
+            if Lapsus and Lapsus_DrawRect_Filled then
                 -- Pas de highlight par ligne, le gradient est dessinÃ© une fois
                 -- hors boucle Ã  smoothCursorY (voir aprÃ¨s la boucle)
                 -- In-loop highlight : Old = gradient exact position | New = rien (swipe gere tout)
@@ -4386,8 +4386,8 @@ function Menu.Actions.RenderMenu()
                         -- Separator lines (couleur du thème actif)
                         local lineW = (menuW_px - txtW - 20 * menuScale) / 2
                         if lineW > 0 then
-                            Lapsus.DrawRect_Filled(leftX_px + 5, rowY_px + optH_px/2, lineW, 1, sideR, sideG, sideB, 0.55, 0)
-                            Lapsus.DrawRect_Filled(leftX_px + menuW_px - lineW - 5, rowY_px + optH_px/2, lineW, 1, sideR, sideG, sideB, 0.55, 0)
+                            Lapsus_DrawRect_Filled(leftX_px + 5, rowY_px + optH_px/2, lineW, 1, sideR, sideG, sideB, 0.55, 0)
+                            Lapsus_DrawRect_Filled(leftX_px + menuW_px - lineW - 5, rowY_px + optH_px/2, lineW, 1, sideR, sideG, sideB, 0.55, 0)
                         end
                      end
                 end
@@ -4423,7 +4423,7 @@ function Menu.Actions.RenderMenu()
                         -- Font pas encore chargé : fallback petit tiret
                         local _isz = math.floor(fontSize * 0.30)
                         local _iy  = rowY_px + (optH_px - _isz) * 0.5
-                        Lapsus.DrawRect_Filled(leftX_px + math.floor(12*menuScale), _iy, _isz, _isz, sideR,sideG,sideB, 0.80, math.floor(_isz*0.3))
+                        Lapsus_DrawRect_Filled(leftX_px + math.floor(12*menuScale), _iy, _isz, _isz, sideR,sideG,sideB, 0.80, math.floor(_isz*0.3))
                         textX = math.floor(leftX_px + math.floor(12*menuScale) + _isz + math.floor(14*menuScale))
                     end
                 end
@@ -4436,7 +4436,7 @@ function Menu.Actions.RenderMenu()
                 Lapsus_DrawText_compat(textX, textY, cleanLabel, fontSize, 0.94, 0.94, 0.92, 1)
 
                 -- Tag OCC/FREE petit, colle apres le texte
-                if _vehTag and Lapsus_GetTextWidth_compat and Lapsus.DrawRect_Filled and Lapsus_DrawText_compat then
+                if _vehTag and Lapsus_GetTextWidth_compat and Lapsus_DrawRect_Filled and Lapsus_DrawText_compat then
                     local tagFont  = math.max(10, (fontSize - 5))
                     local tagTxt   = _vehTag
                     local tagW     = Lapsus_GetTextWidth_compat(tagTxt, tagFont) + 8
@@ -4447,7 +4447,7 @@ function Menu.Actions.RenderMenu()
                     local tr = _vehTagOcc and 0.9 or 0.2
                     local tg = _vehTagOcc and 0.2 or 0.85
                     local tb = _vehTagOcc and 0.2 or 0.2
-                    Lapsus.DrawRect_Filled(tagX, tagY, tagW, tagH, tr, tg, tb, 0.75, 4)
+                    Lapsus_DrawRect_Filled(tagX, tagY, tagW, tagH, tr, tg, tb, 0.75, 4)
                     Lapsus_DrawText_compat(tagX + 4, tagY + 2, tagTxt, tagFont, 1, 1, 1, 1)
                 end
 
@@ -4493,9 +4493,9 @@ function Menu.Actions.RenderMenu()
                             knobX = switchX + switchW - knobSize - knobPad
                         end
                         -- Background Pill
-                        Lapsus.DrawRect_Filled(switchX, switchY, switchW, switchH, r, g, b, a_bg, 10)
+                        Lapsus_DrawRect_Filled(switchX, switchY, switchW, switchH, r, g, b, a_bg, 10)
                         -- Knob
-                        Lapsus.DrawRect_Filled(knobX, switchY + knobPad, knobSize, knobSize, 1, 1, 1, 1.0, 10)
+                        Lapsus_DrawRect_Filled(knobX, switchY + knobPad, knobSize, knobSize, 1, 1, 1, 1.0, 10)
                     end
 
                     if badgeOverride and (not isToggle or isToggleSelector) then
@@ -4510,7 +4510,7 @@ function Menu.Actions.RenderMenu()
                         local bta = 0.8
                         local br, bg, bb, a_bg2 = btr, btg, btb, bta * 0.4
                         if badgeOverride == "ACTIVE" then a_bg2 = bta end
-                        Lapsus.DrawRect_Filled(badgeX, switchY, badgeW, switchH, br, bg, bb, a_bg2, 10)
+                        Lapsus_DrawRect_Filled(badgeX, switchY, badgeW, switchH, br, bg, bb, a_bg2, 10)
                         if Lapsus_GetTextWidth_compat then
                             local tW = Lapsus_GetTextWidth_compat(badgeOverride, fontSize - 2)
                             Lapsus_DrawText_compat(badgeX + (badgeW - tW)/2, switchY + (switchH - (fontSize-2))/2, badgeOverride, fontSize - 2, 1, 1, 1, 1)
@@ -4529,20 +4529,20 @@ function Menu.Actions.RenderMenu()
                     local sliderX = leftX_px + menuW_px - sliderW - sliderRightOffset
                     local sliderY = rowY_px + (optH_px / 2) - (sliderH / 2)
 
-                    Lapsus.DrawRect_Filled(sliderX, sliderY, sliderW, sliderH, 0.2, 0.2, 0.2, 0.8, 2)
+                    Lapsus_DrawRect_Filled(sliderX, sliderY, sliderW, sliderH, 0.2, 0.2, 0.2, 0.8, 2)
 
                     local progress = (sliderValue - sliderMin) / (sliderMax - sliderMin)
                     local progressW = sliderW * progress
                     local tr = (Menu.Colors.SelectedBg.r / 255)
                     local tg = (Menu.Colors.SelectedBg.g / 255)
                     local tb = (Menu.Colors.SelectedBg.b / 255)
-                    Lapsus.DrawRect_Filled(sliderX, sliderY, progressW, sliderH, tr, tg, tb, 0.8, 2)
+                    Lapsus_DrawRect_Filled(sliderX, sliderY, progressW, sliderH, tr, tg, tb, 0.8, 2)
 
                     local knobW = 4 * menuScale
                     local knobH = 12 * menuScale
                     local knobX = sliderX + progressW - (knobW / 2)
                     local knobY = rowY_px + (optH_px / 2) - (knobH / 2)
-                    Lapsus.DrawRect_Filled(knobX, knobY, knobW, knobH, 0.9, 0.9, 0.9, 1.0, 2)
+                    Lapsus_DrawRect_Filled(knobX, knobY, knobW, knobH, 0.9, 0.9, 0.9, 1.0, 2)
 
                     local valText = sliderDisplayText or ((Menu.State.currentMenu == "SETTINGS_RENDER" and index == 1) and string.format("%.2f", sliderValue) or tostring(math.floor(sliderValue)))
                     if Lapsus_GetTextWidth_compat then
@@ -4565,7 +4565,7 @@ function Menu.Actions.RenderMenu()
     end
 
     -- â”€â”€ FLÃˆCHES DE SCROLL (haut / bas) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    if Lapsus and Lapsus.DrawRect_Filled and displayCount > 0 then
+    if Lapsus and Lapsus_DrawRect_Filled and displayCount > 0 then
         local arrowW = math.floor(8 * menuScale)
         local arrowH = math.floor(4 * menuScale)
         local arrowCX = leftX_px + menuW_px / 2  -- centrÃ© horizontalement
@@ -4578,7 +4578,7 @@ function Menu.Actions.RenderMenu()
                 bandW = math.max(2, math.floor(bandW))
                 local bandX = arrowCX - bandW / 2
                 local bandY = listTop_px - math.floor((arrowH + 4) * menuScale) + li * math.floor(2 * menuScale)
-                Lapsus.DrawRect_Filled(bandX, bandY, bandW, math.max(1, math.floor(1.5 * menuScale)), sideR, sideG, sideB, 0.75, 0)
+                Lapsus_DrawRect_Filled(bandX, bandY, bandW, math.max(1, math.floor(1.5 * menuScale)), sideR, sideG, sideB, 0.75, 0)
             end
         end
 
@@ -4591,7 +4591,7 @@ function Menu.Actions.RenderMenu()
                 bandW = math.max(2, math.floor(bandW))
                 local bandX = arrowCX - bandW / 2
                 local bandY = listBottomY + math.floor(4 * menuScale) + li * math.floor(2 * menuScale)
-                Lapsus.DrawRect_Filled(bandX, bandY, bandW, math.max(1, math.floor(1.5 * menuScale)), sideR, sideG, sideB, 0.75, 0)
+                Lapsus_DrawRect_Filled(bandX, bandY, bandW, math.max(1, math.floor(1.5 * menuScale)), sideR, sideG, sideB, 0.75, 0)
             end
         end
     end
@@ -4611,10 +4611,10 @@ function Menu.Actions.RenderMenu()
         local leftTabKey  = isQwerty and "Q" or "A"
         local rightTabKey = "E"
 
-        if Lapsus and Lapsus.DrawRect_Filled and Lapsus_DrawText_compat then
+        if Lapsus and Lapsus_DrawRect_Filled and Lapsus_DrawText_compat then
 
             -- Separateur subtil en haut (blanc tres discret)
-            Lapsus.DrawRect_Filled(leftX_px, infoRowY, menuW_px, math.max(1, math.floor(menuScale)), 1, 1, 1, 0.07, 0)
+            Lapsus_DrawRect_Filled(leftX_px, infoRowY, menuW_px, math.max(1, math.floor(menuScale)), 1, 1, 1, 0.07, 0)
 
             local fFontSize = math.floor(16 * _G.menuScale)
             local fTextY    = infoRowY + (infoRowH - fFontSize) * 0.5
@@ -4631,24 +4631,24 @@ function Menu.Actions.RenderMenu()
             end
 
             -- HINT BAR : fond + bordure theme selon le style choisi (Simple, Glow, Anim, OFF)
-            Lapsus.DrawRect_Filled(leftX_px, hintY, menuW_px, hintH_px, 0, 0, 0, 0.97, menuRounding)
+            Lapsus_DrawRect_Filled(leftX_px, hintY, menuW_px, hintH_px, 0, 0, 0, 0.97, menuRounding)
             if (Menu.State.menuBorderActive ~= false) then
                 local bStyle = Menu.State.menuBorderStyle or 3
                 local b = math.max(1, math.floor(2 * menuScale))
                 if bStyle == 1 then
-                    Lapsus.DrawRect_Filled(leftX_px - b, hintY - b, menuW_px + b * 2, hintH_px + b * 2, sideR, sideG, sideB, 0.90, menuRounding)
-                    Lapsus.DrawRect_Filled(leftX_px, hintY, menuW_px, hintH_px, 0, 0, 0, 0.97, menuRounding)
+                    Lapsus_DrawRect_Filled(leftX_px - b, hintY - b, menuW_px + b * 2, hintH_px + b * 2, sideR, sideG, sideB, 0.90, menuRounding)
+                    Lapsus_DrawRect_Filled(leftX_px, hintY, menuW_px, hintH_px, 0, 0, 0, 0.97, menuRounding)
                 elseif bStyle == 2 then
                     local glow1 = math.max(2, math.floor(2.5 * menuScale))
-                    Lapsus.DrawRect_Filled(leftX_px - glow1, hintY - glow1, menuW_px + glow1 * 2, hintH_px + glow1 * 2, sideR, sideG, sideB, 0.30, menuRounding + 1)
-                    Lapsus.DrawRect_Filled(leftX_px - b, hintY - b, menuW_px + b * 2, hintH_px + b * 2, sideR, sideG, sideB, 0.95, menuRounding)
-                    Lapsus.DrawRect_Filled(leftX_px, hintY, menuW_px, hintH_px, 0, 0, 0, 0.97, menuRounding)
+                    Lapsus_DrawRect_Filled(leftX_px - glow1, hintY - glow1, menuW_px + glow1 * 2, hintH_px + glow1 * 2, sideR, sideG, sideB, 0.30, menuRounding + 1)
+                    Lapsus_DrawRect_Filled(leftX_px - b, hintY - b, menuW_px + b * 2, hintH_px + b * 2, sideR, sideG, sideB, 0.95, menuRounding)
+                    Lapsus_DrawRect_Filled(leftX_px, hintY, menuW_px, hintH_px, 0, 0, 0, 0.97, menuRounding)
                 else
                     -- 3 = ANIM : Bordure animee qui epouse parfaitement les arrondis de la Hint Bar
                     local now = GetGameTimer()
                     local bPulse = 0.70 + 0.30 * math.sin(now / 400.0)
-                    Lapsus.DrawRect_Filled(leftX_px - b, hintY - b, menuW_px + b * 2, hintH_px + b * 2, sideR, sideG, sideB, 0.40 * bPulse, menuRounding)
-                    Lapsus.DrawRect_Filled(leftX_px, hintY, menuW_px, hintH_px, 0, 0, 0, 0.97, menuRounding)
+                    Lapsus_DrawRect_Filled(leftX_px - b, hintY - b, menuW_px + b * 2, hintH_px + b * 2, sideR, sideG, sideB, 0.40 * bPulse, menuRounding)
+                    Lapsus_DrawRect_Filled(leftX_px, hintY, menuW_px, hintH_px, 0, 0, 0, 0.97, menuRounding)
                     Menu.Helpers.DrawRoundedBorderAnim(leftX_px, hintY, menuW_px, hintH_px, menuRounding, sideR, sideG, sideB, menuScale)
                 end
             end
@@ -4668,11 +4668,11 @@ function Menu.Actions.RenderMenu()
                 local bw = math.max(math.floor(24 * menuScale), tw + math.floor(10 * menuScale))
                 local rnd = 4
                 -- 1. Bordure respirante (comme la selection)
-                Lapsus.DrawRect_Filled(bx, keyY, bw, keyH, sideR, sideG, sideB, 0.85 * bPulse, rnd)
+                Lapsus_DrawRect_Filled(bx, keyY, bw, keyH, sideR, sideG, sideB, 0.85 * bPulse, rnd)
                 -- 2. Fond sombre teinté theme
-                Lapsus.DrawRect_Filled(bx + 1, keyY + 1, bw - 2, keyH - 2, sideR * 0.22, sideG * 0.22, sideB * 0.22, 0.92, rnd - 1)
+                Lapsus_DrawRect_Filled(bx + 1, keyY + 1, bw - 2, keyH - 2, sideR * 0.22, sideG * 0.22, sideB * 0.22, 0.92, rnd - 1)
                 -- 3. Respiration interne
-                Lapsus.DrawRect_Filled(bx + 1, keyY + 1, bw - 2, keyH - 2, sideR, sideG, sideB, 0.15 * bPulse, rnd - 1)
+                Lapsus_DrawRect_Filled(bx + 1, keyY + 1, bw - 2, keyH - 2, sideR, sideG, sideB, 0.15 * bPulse, rnd - 1)
                 -- 4. Texte blanc lumineux
                 Lapsus_DrawText_compat(bx + (bw - tw) * 0.5, keyY + (keyH - kFontSize) * 0.5, text, kFontSize, 1, 1, 1, 1.0)
                 return bw
@@ -4710,14 +4710,14 @@ function Menu.Actions.RenderMenu()
                     local relA  = ((tB-cH+180)%360)-180
                     local pBarY = hintY+hintH_px+math.floor(4*menuScale)
                     local pH    = math.floor(20*menuScale)
-                    Lapsus.DrawRect_Filled(leftX_px,pBarY,menuW_px,pH,0,0,0,0.65,4)
+                    Lapsus_DrawRect_Filled(leftX_px,pBarY,menuW_px,pH,0,0,0,0.65,4)
                     local clA  = math.max(-90,math.min(90,relA))
                     local iX   = leftX_px+menuW_px/2+(clA/90)*(menuW_px/2-10*menuScale)
                     local iW   = math.floor(6*menuScale)
                     local ir2,ig2,ib2 = 1,1,1
                     if math.abs(relA)>90 then ir2,ig2,ib2=1,0.3,0.3 end
-                    Lapsus.DrawRect_Filled(iX-iW*0.5,pBarY+3,iW,pH-6,ir2,ig2,ib2,1,2)
-                    Lapsus.DrawRect_Filled(leftX_px+menuW_px/2-1,pBarY+2,2,pH-4,0.9,0.9,0.9,0.4,0)
+                    Lapsus_DrawRect_Filled(iX-iW*0.5,pBarY+3,iW,pH-6,ir2,ig2,ib2,1,2)
+                    Lapsus_DrawRect_Filled(leftX_px+menuW_px/2-1,pBarY+2,2,pH-4,0.9,0.9,0.9,0.4,0)
                     if Lapsus_GetTextWidth_compat then
                         local pF=math.floor(14*menuScale)
                         local pY=pBarY+(pH-pF)*0.5
@@ -5382,8 +5382,8 @@ end)
 CreateThread(function()
     while true do
         Wait(0)
-        local useSusano = (Lapsus and Lapsus_BeginFrame_compat and Lapsus.DrawCommit)
-        if useSusano then
+        local useLapsus = (Lapsus ~= nil)  -- Lapsus est disponible si la table existe
+        if useLapsus then
             Lapsus_BeginFrame_compat()
             if _G.menuFontId and Lapsus_PushFont_compat then
                 Lapsus_PushFont_compat(_G.menuFontId)
@@ -5480,17 +5480,16 @@ CreateThread(function()
             end
         end
 
-        if useSusano then
-            if _G.menuFontId and Lapsus_PopFont_compat then
-                Lapsus_PopFont_compat()
-            end
-            if Menu.OnRender then
-                local success, err = pcall(Menu.OnRender)
-                if not success then end
-            end
-            if Lapsus.DrawCommit then
-                Lapsus.DrawCommit()
-            end
+        if _G.menuFontId and Lapsus_PopFont_compat then
+            Lapsus_PopFont_compat()
+        end
+        if Menu.OnRender then
+            local success, err = pcall(Menu.OnRender)
+            if not success then end
+        end
+        -- DrawCommit publie tous les drawcalls de cette frame
+        if Lapsus and Lapsus.DrawCommit then
+            Lapsus.DrawCommit()
         end
     end
 end)
