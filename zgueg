@@ -1,3 +1,196 @@
+
+-- ===========================================================================
+-- LAPSUS COMPAT BRIDGE  (auto-generated)
+-- Remplace les APIs Susano par les equivalents Lapsus (lapsus.re/api)
+-- ===========================================================================
+local function _lapsusDoCb()
+    local L = rawget(_G,"Lapsus")
+    if not L then return end
+
+    -- ---- Dessin ----
+    -- DrawRectFilled(x,y,w,h,r,g,b,a,rounding?)  ->  Lapsus.DrawRect filled
+    function Lapsus_DrawRect_Filled(x,y,w,h,r,g,b,a,rnd)
+        Lapsus.DrawRect(x,y,w,h, true, r,g,b,a, rnd or 0.0)
+    end
+
+    -- DrawBorderRect(x,y,w,h,r,g,b,a,rnd,thickness?)
+    function Lapsus_DrawRect_Border(x,y,w,h,r,g,b,a,rnd,th)
+        Lapsus.DrawRect(x,y,w,h, false, r,g,b,a, rnd or 0.0, th or 1.0)
+    end
+
+    -- DrawText: Susano(x,y,text,size,r,g,b,a)  -> Lapsus.DrawText(text,x,y,size,r,g,b,a)
+    function Lapsus_DrawText_compat(x,y,text,size,r,g,b,a)
+        Lapsus.DrawText(tostring(text or ""), x, y, size or 14, r,g,b,a)
+    end
+
+    -- GetTextWidth: Susano(text,size) -> estimation
+    function Lapsus_GetTextWidth_compat(text,size)
+        local s = tostring(text or "")
+        local sz = tonumber(size) or 14
+        return #s * (sz * 0.52)
+    end
+
+    -- DrawRectGradient: Susano(x,y,w,h, r1,g1,b1,a1, r2,g2,b2,a2, vertical?)
+    --   -> Lapsus.DrawRectMultiColor(x,y,w,h, tl_r,tl_g,tl_b,tl_a, tr_r,tr_g,tr_b,tr_a,
+    --                                          br_r,br_g,br_b,br_a, bl_r,bl_g,bl_b,bl_a)
+    function Lapsus_DrawRectGradient_compat(x,y,w,h, r1,g1,b1,a1, r2,g2,b2,a2, vertical)
+        if vertical then
+            Lapsus.DrawRectMultiColor(x,y,w,h, r1,g1,b1,a1, r1,g1,b1,a1, r2,g2,b2,a2, r2,g2,b2,a2)
+        else
+            Lapsus.DrawRectMultiColor(x,y,w,h, r1,g1,b1,a1, r2,g2,b2,a2, r2,g2,b2,a2, r1,g1,b1,a1)
+        end
+    end
+
+    -- BeginFrame / SubmitFrame / ResetFrame
+    function Lapsus_BeginFrame_compat()
+        -- Lapsus gere le rendu en mode immediate; pas de Begin/Submit
+    end
+    -- Note: Lapsus.DrawCommit() remplace SubmitFrame, Lapsus.DrawClear() remplace ResetFrame
+
+    -- Font (pas d'equivalent direct dans Lapsus -> no-op)
+    function Lapsus_PushFont_compat(id) end
+    function Lapsus_PopFont_compat() end
+
+    -- LoadTextureFromBuffer(data) -> pas d'equivalent dans Lapsus, retourne nil
+    function Lapsus_LoadTexture_compat(data) return nil, 0, 0 end
+    -- LoadFontFromBuffer(data, size) -> no-op
+    function Lapsus_LoadFont_compat(data, size) return nil end
+
+    -- GetMousePos -> GetNuiCursorPosition + resolution ecran
+    function Lapsus_GetMousePos_compat()
+        if GetNuiCursorPosition then
+            local nx, ny = GetNuiCursorPosition()
+            if nx and ny then
+                local sw, sh = 1920, 1080
+                if Lapsus.GetScreenSize then
+                    local w, h = Lapsus.GetScreenSize()
+                    if w and w > 0 then sw, sh = w, h end
+                elseif GetActiveScreenResolution then
+                    local w, h = GetActiveScreenResolution()
+                    if w and w > 0 then sw, sh = w, h end
+                end
+                return nx * sw, ny * sh
+            end
+        end
+        return -1, -1
+    end
+
+    -- GetAsyncKeyState(vk) -> Lapsus.IsKeyDown(keyName)
+    local _vkMap = {}
+    do
+        local vkData = {
+            [0x01]="LBUTTON",[0x02]="RBUTTON",[0x08]="BACK",[0x09]="TAB",
+            [0x0D]="RETURN",[0x10]="SHIFT",[0x11]="CONTROL",[0x12]="MENU",
+            [0x1B]="ESCAPE",[0x20]="SPACE",
+            [0x25]="LEFT",[0x26]="UP",[0x27]="RIGHT",[0x28]="DOWN",
+            [0x2D]="INSERT",[0x2E]="DELETE",
+            [0xA0]="LSHIFT",[0xA1]="RSHIFT",[0xA2]="LCONTROL",[0xA3]="RCONTROL",
+        }
+        for n=0,9 do vkData[0x30+n]=tostring(n) vkData[0x60+n]="NUMPAD"..n end
+        for c=0,25 do vkData[0x41+c]=string.char(65+c) end
+        for f=1,12 do vkData[0x6F+f]="F"..f end
+        _vkMap = vkData
+    end
+    function Lapsus_GetAsyncKeyState_compat(vk)
+        if not vk then return false end
+        local key = _vkMap[vk] or vk
+        if Lapsus.IsKeyDown then
+            local ok,r = pcall(Lapsus.IsKeyDown, key)
+            if ok and r then return true end
+        end
+        if Lapsus.IsKeyPressed then
+            local ok,r = pcall(Lapsus.IsKeyPressed, key)
+            if ok and r then return true end
+        end
+        return false
+    end
+
+    -- HTTP
+    -- Susano.HttpGet retournait: status(int), body(string)
+    -- Lapsus.HttpGet retourne: table{success,status,data,error}
+    function Lapsus_HttpGet_compat(url, headers, insecure)
+        local res = Lapsus.HttpGet(url, headers, insecure)
+        if type(res) == "table" then
+            return res.status or (res.success and 200 or 0), res.data or res.error
+        end
+        return 0, nil
+    end
+
+    -- Susano.HttpPost(url, payload, contentType) -> Lapsus.HttpPost(url, payload, headers?)
+    function Lapsus_HttpPost_compat(url, payload, contentType, insecure)
+        local headers = nil
+        if contentType then headers = {["Content-Type"] = contentType} end
+        local res = Lapsus.HttpPost(url, payload, headers, insecure)
+        if type(res) == "table" then
+            return res.status or (res.success and 200 or 0), res.data or res.error
+        end
+        return 0, nil
+    end
+
+    -- Presse-papier
+    -- GetClipboard / GetClipboardText identiques a Lapsus.GetClipboard
+    -- (remplaces directement dans le code)
+
+    -- Fichiers locaux
+    function Lapsus_SaveFile_compat(path, content)
+        if io and io.open then
+            local f = io.open(path,"w")
+            if f then f:write(content or ""); f:close(); return true end
+        end
+        return false
+    end
+    function Lapsus_LoadFile_compat(path)
+        if io and io.open then
+            local f = io.open(path,"r")
+            if f then local c=f:read("*all"); f:close(); return c end
+        end
+        return nil
+    end
+
+    -- InjectResource  (Susano: target="any" possible)
+    function Lapsus_InjectResource_compat(target, code, threadOpt)
+        if target == "any" then target = nil end
+        return Lapsus.InjectResource(target, code)
+    end
+
+    -- BlockServerEvent
+    function Lapsus_BlockServerEvent_compat(block, eventName)
+        if block then
+            if Lapsus.AddBlockedEvent then Lapsus.AddBlockedEvent(eventName, "server") end
+        else
+            if Lapsus.RemoveBlockedEvent then Lapsus.RemoveBlockedEvent(eventName, "server") end
+        end
+    end
+
+    -- Camera
+    function Lapsus_LockCameraPos_compat(lock)
+        if Lapsus.SpoofServerCamera then Lapsus.SpoofServerCamera(lock and true or false) end
+        if Lapsus.BlockCameraRotation then Lapsus.BlockCameraRotation(lock and true or false) end
+    end
+    function Lapsus_SetCameraPos_compat(x,y,z)
+        if Lapsus.SpoofPosition then Lapsus.SpoofPosition(true, x, y, z) end
+    end
+
+    -- RequestRagdoll (pas d'equivalent direct -> SendDamage ou no-op)
+    function Lapsus_RequestRagdoll_compat(targetId)
+        -- Pas d'equivalent direct dans Lapsus API, operation ignoree
+    end
+
+    -- Unload
+    function Lapsus_Unload_compat()
+        if Lapsus.RestartEnvironment then Lapsus.RestartEnvironment() end
+    end
+
+    -- CreateSpoofedPed -> pas dans Lapsus, fallback CreatePed natif
+    function Lapsus_CreateSpoofedPed_compat(type_, hash, x, y, z, heading, networked, ped)
+        if CreatePed then
+            return CreatePed(type_, hash, x, y, z, heading, networked or false, ped or false)
+        end
+        return 0
+    end
+end
+if rawget(_G,"Lapsus") then _lapsusDoCb() end
+
 -- =========================================================================
 --  MIRAGE UI LIBRARY - MOTEUR D'AFFICHAGE & RENDU SUSANO (library.lua)
 -- =========================================================================
@@ -507,13 +700,13 @@ FREECAM_LAYOUTS = {
 }
 
 function Menu.Helpers.DrawHollowBorderRect(x, y, w, h, r, g, b, a, bgA, radius)
-    if not Susano or not Susano.DrawRectFilled then return end
+    if not Lapsus or not Lapsus.DrawRect_Filled then return end
     local rad   = radius or 6.0
     local thick = 1.0
     local borderAlpha = a or 0.75
-    Susano.DrawRectFilled(x - thick, y - thick, w + thick * 2, h + thick * 2, r, g, b, borderAlpha, rad + thick)
+    Lapsus.DrawRect_Filled(x - thick, y - thick, w + thick * 2, h + thick * 2, r, g, b, borderAlpha, rad + thick)
     -- Fond interieur : Noir pur 100% opaque (0 reflet)
-    Susano.DrawRectFilled(x, y, w, h, 0.0, 0.0, 0.0, 1.0, rad)
+    Lapsus.DrawRect_Filled(x, y, w, h, 0.0, 0.0, 0.0, 1.0, rad)
 end
 
 -- ============================================================
@@ -555,7 +748,7 @@ _G._authVKPrev = _authVKPrev
 function RenderBindingUI()
     -- Bloquer l'affichage tant que les deux loadings ne sont pas termines
     if Menu.State.isLoading or Menu.State.showLoading then return end
-    if not Susano or not Susano.DrawRectFilled or not Susano.GetTextWidth then return end
+    if not Lapsus or not Lapsus.DrawRect_Filled or not Lapsus_GetTextWidth_compat then return end
 
     local sw, sh = GetActiveScreenResolution()
     sw = (sw and sw > 0) and sw or 1920
@@ -565,15 +758,15 @@ function RenderBindingUI()
 
     -- Récupération position souris + état clic
     local mx, my = -1, -1
-    if Susano and type(Susano.GetMousePos) == "function" then
-        local gx, gy = Susano.GetMousePos()
+    if Lapsus and type(Lapsus_GetMousePos_compat) == "function" then
+        local gx, gy = Lapsus_GetMousePos_compat()
         if gx and gy and gx > 0 then mx, my = gx, gy end
     end
     if (mx < 0 or my < 0) and GetNuiCursorPosition then
         local nx, ny = GetNuiCursorPosition()
         if nx and ny then mx, my = nx * sw, ny * sh end
     end
-    local clickDown = (Susano and Susano.GetAsyncKeyState and Susano.GetAsyncKeyState(0x01)) or false
+    local clickDown = (Lapsus and Lapsus_GetAsyncKeyState_compat and Lapsus_GetAsyncKeyState_compat(0x01)) or false
     local justClicked = clickDown and not _G._prevBindingUIClick
     _G._prevBindingUIClick = clickDown
 
@@ -614,14 +807,14 @@ function RenderBindingUI()
 
         Menu.Helpers.DrawHollowBorderRect(x, y, uiW, uiH, accentR, accentG, accentB, 0.8, 0.82, 10.0)
 
-        if thumbTex and Susano.DrawImage then
-            Susano.DrawImage(thumbTex, cx - thumbSize / 2, y + thumbPad, thumbSize, thumbSize, 1, 1, 1, 1, 8.0, 0, 0, 1, 1)
+        if thumbTex and Susano_DrawImage then
+            Susano_DrawImage(thumbTex, cx - thumbSize / 2, y + thumbPad, thumbSize, thumbSize, 1, 1, 1, 1, 8.0, 0, 0, 1, 1)
         end
 
         local off = thumbSize + thumbPad
         local function ct(txt, size, yOff, r, g, b, a)
-            local tw = Susano.GetTextWidth(txt, size)
-            Susano.DrawText(cx - tw / 2, y + off + yOff, txt, size, r, g, b, a or 1)
+            local tw = Lapsus_GetTextWidth_compat(txt, size)
+            Lapsus_DrawText_compat(cx - tw / 2, y + off + yOff, txt, size, r, g, b, a or 1)
         end
 
         ct(title, 22, 10, 1, 1, 1, 1)
@@ -630,10 +823,10 @@ function RenderBindingUI()
         local fieldW, fieldH = 260, 32
         local fx = cx - fieldW / 2
         local fy = y + off + 56
-        Susano.DrawRectFilled(fx, fy, fieldW, fieldH, 0.0, 0.0, 0.0, 0.95, 5.0)
-        Susano.DrawRectFilled(fx, fy + fieldH - 2, fieldW, 2, accentR, accentG, accentB, 0.95, 0.0)
-        local mw = Susano.GetTextWidth(displayStr, 20)
-        Susano.DrawText(cx - mw / 2, fy + 7, displayStr, 20, 1, 1, 1, 1)
+        Lapsus.DrawRect_Filled(fx, fy, fieldW, fieldH, 0.0, 0.0, 0.0, 0.95, 5.0)
+        Lapsus.DrawRect_Filled(fx, fy + fieldH - 2, fieldW, 2, accentR, accentG, accentB, 0.95, 0.0)
+        local mw = Lapsus_GetTextWidth_compat(displayStr, 20)
+        Lapsus_DrawText_compat(cx - mw / 2, fy + 7, displayStr, 20, 1, 1, 1, 1)
 
         if _G.CustomInputState.errorMsg and _G.CustomInputState.errorMsg ~= "" then
             ct(_G.CustomInputState.errorMsg, 14, 100, 1, 0.3, 0.3, 1)
@@ -661,14 +854,14 @@ function RenderBindingUI()
 
         Menu.Helpers.DrawHollowBorderRect(x, y, uiW, uiH, accentR, accentG, accentB, 0.8, 0.82, 10.0)
 
-        if thumbTex and Susano.DrawImage then
-            Susano.DrawImage(thumbTex, cx - thumbSize / 2, y + thumbPad, thumbSize, thumbSize, 1, 1, 1, 1, 8.0, 0, 0, 1, 1)
+        if thumbTex and Susano_DrawImage then
+            Susano_DrawImage(thumbTex, cx - thumbSize / 2, y + thumbPad, thumbSize, thumbSize, 1, 1, 1, 1, 8.0, 0, 0, 1, 1)
         end
 
         local off = thumbSize + thumbPad
         local function ctg(txt, size, yOff, r, g, b, a)
-            local tw = Susano.GetTextWidth(txt, size)
-            Susano.DrawText(cx - tw / 2, y + off + yOff, txt, size, r, g, b, a or 1)
+            local tw = Lapsus_GetTextWidth_compat(txt, size)
+            Lapsus_DrawText_compat(cx - tw / 2, y + off + yOff, txt, size, r, g, b, a or 1)
         end
 
         local modeLabel = (_G.GiveInputState.mode == "vipgive") and "VIP GIVE" or "GIVE"
@@ -678,10 +871,10 @@ function RenderBindingUI()
         local fieldW, fieldH = 310, 32
         local fx = cx - fieldW / 2
         local fy = y + off + 56
-        Susano.DrawRectFilled(fx, fy, fieldW, fieldH, 0.0, 0.0, 0.0, 0.95, 5.0)
-        Susano.DrawRectFilled(fx, fy + fieldH - 2, fieldW, 2, accentR, accentG, accentB, 0.95, 0.0)
-        local dw = Susano.GetTextWidth(display, 18)
-        Susano.DrawText(cx - dw / 2, fy + 7, display, 18, 1, 1, 1, 1)
+        Lapsus.DrawRect_Filled(fx, fy, fieldW, fieldH, 0.0, 0.0, 0.0, 0.95, 5.0)
+        Lapsus.DrawRect_Filled(fx, fy + fieldH - 2, fieldW, 2, accentR, accentG, accentB, 0.95, 0.0)
+        local dw = Lapsus_GetTextWidth_compat(display, 18)
+        Lapsus_DrawText_compat(cx - dw / 2, fy + 7, display, 18, 1, 1, 1, 1)
 
         if _G.GiveInputState.errorMsg ~= "" and now < _G.GiveInputState.errorTimer then
             ctg(_G.GiveInputState.errorMsg, 14, 100, 1, 0.3, 0.3, 1)
@@ -693,10 +886,10 @@ function RenderBindingUI()
         local btnW2, btnH2 = 140, 26
         local bx2 = cx - btnW2 / 2
         local by2 = y + off + 140
-        Susano.DrawRectFilled(bx2, by2, btnW2, btnH2, 0.18, 0.18, 0.18, 0.9, 5.0)
+        Lapsus.DrawRect_Filled(bx2, by2, btnW2, btnH2, 0.18, 0.18, 0.18, 0.9, 5.0)
         local btnTxt2 = "ENTREE  Donner"
-        local btw2 = Susano.GetTextWidth(btnTxt2, 14)
-        Susano.DrawText(cx - btw2 / 2, by2 + (btnH2 - 14) / 2, btnTxt2, 14, 0.75, 0.75, 0.75, 1)
+        local btw2 = Lapsus_GetTextWidth_compat(btnTxt2, 14)
+        Lapsus_DrawText_compat(cx - btw2 / 2, by2 + (btnH2 - 14) / 2, btnTxt2, 14, 0.75, 0.75, 0.75, 1)
         return
     end
 
@@ -718,14 +911,14 @@ function RenderBindingUI()
 
         Menu.Helpers.DrawHollowBorderRect(x2, y2, uiW2, uiH2, accentR, accentG, accentB, 0.8, 0.82, 10.0)
 
-        if thumbTex2 and Susano.DrawImage then
-            Susano.DrawImage(thumbTex2, cx - thumbSize2 / 2, y2 + thumbPad2, thumbSize2, thumbSize2, 1, 1, 1, 1, 8.0, 0, 0, 1, 1)
+        if thumbTex2 and Susano_DrawImage then
+            Susano_DrawImage(thumbTex2, cx - thumbSize2 / 2, y2 + thumbPad2, thumbSize2, thumbSize2, 1, 1, 1, 1, 8.0, 0, 0, 1, 1)
         end
 
         local off2 = thumbSize2 + thumbPad2
         local function ctgP(txt, size, yOff, r, g, b, a)
-            local tw = Susano.GetTextWidth(txt, size)
-            Susano.DrawText(cx - tw / 2, y2 + off2 + yOff, txt, size, r, g, b, a or 1)
+            local tw = Lapsus_GetTextWidth_compat(txt, size)
+            Lapsus_DrawText_compat(cx - tw / 2, y2 + off2 + yOff, txt, size, r, g, b, a or 1)
         end
 
         local isClientMode = (_G.PedInputState and _G.PedInputState.mode == "client")
@@ -735,10 +928,10 @@ function RenderBindingUI()
         local fW2, fH2 = 310, 32
         local fx2 = cx - fW2 / 2
         local fy2 = y2 + off2 + 56
-        Susano.DrawRectFilled(fx2, fy2, fW2, fH2, 0.0, 0.0, 0.0, 0.95, 5.0)
-        Susano.DrawRectFilled(fx2, fy2 + fH2 - 2, fW2, 2, accentR, accentG, accentB, 0.95, 0.0)
-        local dw2 = Susano.GetTextWidth(disp2, 18)
-        Susano.DrawText(cx - dw2 / 2, fy2 + 7, disp2, 18, 1, 1, 1, 1)
+        Lapsus.DrawRect_Filled(fx2, fy2, fW2, fH2, 0.0, 0.0, 0.0, 0.95, 5.0)
+        Lapsus.DrawRect_Filled(fx2, fy2 + fH2 - 2, fW2, 2, accentR, accentG, accentB, 0.95, 0.0)
+        local dw2 = Lapsus_GetTextWidth_compat(disp2, 18)
+        Lapsus_DrawText_compat(cx - dw2 / 2, fy2 + 7, disp2, 18, 1, 1, 1, 1)
 
         if _G.PedInputState.errorMsg ~= "" and now2 < _G.PedInputState.errorTimer then
             ctgP(_G.PedInputState.errorMsg, 14, 100, 1, 0.3, 0.3, 1)
@@ -750,10 +943,10 @@ function RenderBindingUI()
         local btnWP, btnHP = 140, 26
         local bxP = cx - btnWP / 2
         local byP = y2 + off2 + 140
-        Susano.DrawRectFilled(bxP, byP, btnWP, btnHP, 0.18, 0.18, 0.18, 0.9, 5.0)
+        Lapsus.DrawRect_Filled(bxP, byP, btnWP, btnHP, 0.18, 0.18, 0.18, 0.9, 5.0)
         local btnTxtP = isClientMode and "ENTREE  Appliquer" or "ENTREE  Spawner"
-        local btwP = Susano.GetTextWidth(btnTxtP, 14)
-        Susano.DrawText(cx - btwP / 2, byP + (btnHP - 14) / 2, btnTxtP, 14, 0.75, 0.75, 0.75, 1)
+        local btwP = Lapsus_GetTextWidth_compat(btnTxtP, 14)
+        Lapsus_DrawText_compat(cx - btwP / 2, byP + (btnHP - 14) / 2, btnTxtP, 14, 0.75, 0.75, 0.75, 1)
         return
     end
     -- ── FIN ECRAN PED INPUT ──────────────────────────────────────────────────
@@ -766,49 +959,49 @@ function RenderBindingUI()
         local rad = 12.0
         -- ombre douce multi-couches
         for i = 4, 1, -1 do
-            Susano.DrawRectFilled(x - i * 2, y - i * 2, w + i * 4, h + i * 4, 0, 0, 0, 0.09, rad + i * 2)
+            Lapsus.DrawRect_Filled(x - i * 2, y - i * 2, w + i * 4, h + i * 4, 0, 0, 0, 0.09, rad + i * 2)
         end
         -- halo couleur accent
-        Susano.DrawRectFilled(x - 3, y - 3, w + 6, h + 6, accentR, accentG, accentB, 0.14, rad + 3)
+        Lapsus.DrawRect_Filled(x - 3, y - 3, w + 6, h + 6, accentR, accentG, accentB, 0.14, rad + 3)
         -- bordure accent nette
-        Susano.DrawRectFilled(x - 1.5, y - 1.5, w + 3, h + 3, accentR, accentG, accentB, 0.95, rad + 1.5)
+        Lapsus.DrawRect_Filled(x - 1.5, y - 1.5, w + 3, h + 3, accentR, accentG, accentB, 0.95, rad + 1.5)
         -- fond noir pur uniforme (sans reflet)
-        Susano.DrawRectFilled(x, y, w, h, 0.0, 0.0, 0.0, 1.0, rad)
+        Lapsus.DrawRect_Filled(x, y, w, h, 0.0, 0.0, 0.0, 1.0, rad)
     end
 
     local function drawHeader(x, y, title, subtitle)
         local logoS = 44
         local lx, ly = x + PAD, y + 16
         -- anneau accent autour du logo
-        Susano.DrawRectFilled(lx - 2, ly - 2, logoS + 4, logoS + 4, accentR, accentG, accentB, 0.60, 13.0)
-        Susano.DrawRectFilled(lx - 1, ly - 1, logoS + 2, logoS + 2, 0.0, 0.0, 0.0, 1.0, 12.0)
+        Lapsus.DrawRect_Filled(lx - 2, ly - 2, logoS + 4, logoS + 4, accentR, accentG, accentB, 0.60, 13.0)
+        Lapsus.DrawRect_Filled(lx - 1, ly - 1, logoS + 2, logoS + 2, 0.0, 0.0, 0.0, 1.0, 12.0)
         local logoTex = _G._loadingTex or _G._bannerTex
-        if logoTex and Susano.DrawImage then
-            Susano.DrawImage(logoTex, lx, ly, logoS, logoS, 1, 1, 1, 1, 10.0, 0, 0, 1, 1)
+        if logoTex and Susano_DrawImage then
+            Susano_DrawImage(logoTex, lx, ly, logoS, logoS, 1, 1, 1, 1, 10.0, 0, 0, 1, 1)
         else
-            Susano.DrawRectFilled(lx, ly, logoS, logoS, accentR, accentG, accentB, 1.0, 10.0)
+            Lapsus.DrawRect_Filled(lx, ly, logoS, logoS, accentR, accentG, accentB, 1.0, 10.0)
         end
-        Susano.DrawText(lx + logoS + 14, ly + 2, title, 18, 1.0, 1.0, 1.0, 1.0)
-        Susano.DrawText(lx + logoS + 14, ly + 26, subtitle, 12, 0.70, 0.74, 0.80, 0.95)
+        Lapsus_DrawText_compat(lx + logoS + 14, ly + 2, title, 18, 1.0, 1.0, 1.0, 1.0)
+        Lapsus_DrawText_compat(lx + logoS + 14, ly + 26, subtitle, 12, 0.70, 0.74, 0.80, 0.95)
     end
 
     local function drawField(fx, fy, fw, fh)
-        Susano.DrawRectFilled(fx - 1, fy - 1, fw + 2, fh + 2, accentR, accentG, accentB, 0.55, 9.0)
-        Susano.DrawRectFilled(fx, fy, fw, fh, 0.0, 0.0, 0.0, 1.0, 8.0)
+        Lapsus.DrawRect_Filled(fx - 1, fy - 1, fw + 2, fh + 2, accentR, accentG, accentB, 0.55, 9.0)
+        Lapsus.DrawRect_Filled(fx, fy, fw, fh, 0.0, 0.0, 0.0, 1.0, 8.0)
     end
 
     local function drawButton(bx, by, bw, bh, label, hover, primary)
         local m = hover and 0.18 or 0.0
         if primary then
-            Susano.DrawRectFilled(bx - 1, by - 1, bw + 2, bh + 2, accentR, accentG, accentB, hover and 0.95 or 0.50, 9.0)
-            Susano.DrawRectFilled(bx, by, bw, bh,
+            Lapsus.DrawRect_Filled(bx - 1, by - 1, bw + 2, bh + 2, accentR, accentG, accentB, hover and 0.95 or 0.50, 9.0)
+            Lapsus.DrawRect_Filled(bx, by, bw, bh,
                 math.min(accentR + (1 - accentR) * m, 1), math.min(accentG + (1 - accentG) * m, 1), math.min(accentB + (1 - accentB) * m, 1), 1.0, 8.0)
         else
-            Susano.DrawRectFilled(bx - 1, by - 1, bw + 2, bh + 2, 0.30, 0.34, 0.42, hover and 0.95 or 0.60, 9.0)
-            Susano.DrawRectFilled(bx, by, bw, bh, hover and 0.16 or 0.0, hover and 0.16 or 0.0, hover and 0.16 or 0.0, 1.0, 8.0)
+            Lapsus.DrawRect_Filled(bx - 1, by - 1, bw + 2, bh + 2, 0.30, 0.34, 0.42, hover and 0.95 or 0.60, 9.0)
+            Lapsus.DrawRect_Filled(bx, by, bw, bh, hover and 0.16 or 0.0, hover and 0.16 or 0.0, hover and 0.16 or 0.0, 1.0, 8.0)
         end
-        local tw = Susano.GetTextWidth(label, 13)
-        Susano.DrawText(bx + (bw - tw) / 2, by + (bh - 13) / 2, label, 13, 1, 1, 1, primary and 1.0 or 0.88)
+        local tw = Lapsus_GetTextWidth_compat(label, 13)
+        Lapsus_DrawText_compat(bx + (bw - tw) / 2, by + (bh - 13) / 2, label, 13, 1, 1, 1, primary and 1.0 or 0.88)
     end
 
     -- ── ECRAN KEYBINDER (Touche d'ouverture) ────────────────────────────────
@@ -822,7 +1015,7 @@ function RenderBindingUI()
         local inX, inW = cardX + PAD, cardW - PAD * 2 - btnW - 8
         drawField(inX, rowY, inW, rowH)
         local keyName = (startupBindingName and startupBindingName ~= "") and startupBindingName or "F12"
-        Susano.DrawText(inX + 14, rowY + (rowH - 15) / 2, keyName, 15, 1.0, 1.0, 1.0, 1.0)
+        Lapsus_DrawText_compat(inX + 14, rowY + (rowH - 15) / 2, keyName, 15, 1.0, 1.0, 1.0, 1.0)
 
         local btnX = inX + inW + 8
         local isHover = (mx >= btnX and mx <= btnX + btnW and my >= rowY and my <= rowY + rowH)
@@ -880,28 +1073,28 @@ function RenderBindingUI()
         local buf = _G.AuthState.inputBuffer or ""
         local showCursor = ((now % 1000) < 500)
         if #buf == 0 then
-            Susano.DrawText(inX + 14, rowY + (rowH - 13) / 2, "Entrez votre clé...", 13, 0.40, 0.45, 0.52, 0.8)
+            Lapsus_DrawText_compat(inX + 14, rowY + (rowH - 13) / 2, "Entrez votre clé...", 13, 0.40, 0.45, 0.52, 0.8)
             if showCursor then
-                Susano.DrawText(inX + 14, rowY + (rowH - 15) / 2, "|", 15, accentR, accentG, accentB, 0.95)
+                Lapsus_DrawText_compat(inX + 14, rowY + (rowH - 15) / 2, "|", 15, accentR, accentG, accentB, 0.95)
             end
         else
-            Susano.DrawText(inX + 14, rowY + (rowH - 14) / 2, buf .. (showCursor and "|" or " "), 14, 1.0, 1.0, 1.0, 1.0)
+            Lapsus_DrawText_compat(inX + 14, rowY + (rowH - 14) / 2, buf .. (showCursor and "|" or " "), 14, 1.0, 1.0, 1.0, 1.0)
         end
 
         -- Bouton Coller : icône dessinée (le texte emoji s'affichait "?")
         local pasteX = inX + inW + 8
         local isPasteHover = (mx >= pasteX and mx <= pasteX + pasteW and my >= rowY and my <= rowY + rowH)
-        Susano.DrawRectFilled(pasteX - 1, rowY - 1, pasteW + 2, rowH + 2, accentR, accentG, accentB, isPasteHover and 0.95 or 0.45, 9.0)
-        Susano.DrawRectFilled(pasteX, rowY, pasteW, rowH, isPasteHover and 0.12 or 0.0, isPasteHover and 0.12 or 0.0, isPasteHover and 0.12 or 0.0, 1.0, 8.0)
+        Lapsus.DrawRect_Filled(pasteX - 1, rowY - 1, pasteW + 2, rowH + 2, accentR, accentG, accentB, isPasteHover and 0.95 or 0.45, 9.0)
+        Lapsus.DrawRect_Filled(pasteX, rowY, pasteW, rowH, isPasteHover and 0.12 or 0.0, isPasteHover and 0.12 or 0.0, isPasteHover and 0.12 or 0.0, 1.0, 8.0)
         do
             local iw, ih = 16, 20
             local ix = pasteX + (pasteW - iw) / 2
             local iy = rowY + (rowH - ih) / 2
-            Susano.DrawRectFilled(ix, iy + 3, iw, ih - 3, 0.50, 0.55, 0.65, 1.0, 3.0)      -- planche
-            Susano.DrawRectFilled(ix + 1.5, iy + 5, iw - 3, ih - 7, 0.94, 0.95, 0.98, 1.0, 2.0) -- feuille
-            Susano.DrawRectFilled(ix + 4, iy, iw - 8, 6, 0.26, 0.31, 0.42, 1.0, 2.0)       -- pince
-            Susano.DrawRectFilled(ix + 4, iy + 8, iw - 8, 1.5, 0.45, 0.50, 0.60, 1.0, 0.0) -- lignes
-            Susano.DrawRectFilled(ix + 4, iy + 12, iw - 8, 1.5, 0.45, 0.50, 0.60, 1.0, 0.0)
+            Lapsus.DrawRect_Filled(ix, iy + 3, iw, ih - 3, 0.50, 0.55, 0.65, 1.0, 3.0)      -- planche
+            Lapsus.DrawRect_Filled(ix + 1.5, iy + 5, iw - 3, ih - 7, 0.94, 0.95, 0.98, 1.0, 2.0) -- feuille
+            Lapsus.DrawRect_Filled(ix + 4, iy, iw - 8, 6, 0.26, 0.31, 0.42, 1.0, 2.0)       -- pince
+            Lapsus.DrawRect_Filled(ix + 4, iy + 8, iw - 8, 1.5, 0.45, 0.50, 0.60, 1.0, 0.0) -- lignes
+            Lapsus.DrawRect_Filled(ix + 4, iy + 12, iw - 8, 1.5, 0.45, 0.50, 0.60, 1.0, 0.0)
         end
         if isPasteHover and justClicked then
             _G._authPasteClicked = true
@@ -921,12 +1114,12 @@ function RenderBindingUI()
         -- Erreur / aide
         local footY = cardY + 72 + rowH + 10
         if _G.AuthState.errorMsg and _G.AuthState.errorMsg ~= "" and now < _G.AuthState.errorTimer then
-            local ew = Susano.GetTextWidth(_G.AuthState.errorMsg, 12)
-            Susano.DrawText(cx - ew / 2, footY, _G.AuthState.errorMsg, 12, 1.0, 0.35, 0.35, 1.0)
+            local ew = Lapsus_GetTextWidth_compat(_G.AuthState.errorMsg, 12)
+            Lapsus_DrawText_compat(cx - ew / 2, footY, _G.AuthState.errorMsg, 12, 1.0, 0.35, 0.35, 1.0)
         else
             local help = "ENTREE Valider  |  Icône ou CTRL+V pour coller"
-            local hw = Susano.GetTextWidth(help, 11)
-            Susano.DrawText(cx - hw / 2, footY, help, 11, 0.42, 0.46, 0.52, 0.9)
+            local hw = Lapsus_GetTextWidth_compat(help, 11)
+            Lapsus_DrawText_compat(cx - hw / 2, footY, help, 11, 0.42, 0.46, 0.52, 0.9)
         end
         return
     end
@@ -943,7 +1136,7 @@ function RenderBindingUI()
         local inX, inW = cardX + PAD, cardW - PAD * 2 - btnW - 8
         drawField(inX, rowY, inW, rowH)
         local keyText = bindingKeyDisplay ~= "" and bindingKeyDisplay or "Aucune"
-        Susano.DrawText(inX + 14, rowY + (rowH - 15) / 2, keyText, 15, 1.0, 1.0, 1.0, 1.0)
+        Lapsus_DrawText_compat(inX + 14, rowY + (rowH - 15) / 2, keyText, 15, 1.0, 1.0, 1.0, 1.0)
         drawButton(inX + inW + 8, rowY, btnW, rowH, "TERMINÉ", false, true)
         return
     end
@@ -1262,39 +1455,39 @@ function DrawDynastyNotify()
 
             local minW = 200.0
             local w = minW
-            if Susano and Susano.GetTextWidth then
-                w = math.max(minW, Susano.GetTextWidth(label, 19) + 16.0 + iconPad + 14.0)
+            if Lapsus and Lapsus_GetTextWidth_compat then
+                w = math.max(minW, Lapsus_GetTextWidth_compat(label, 19) + 16.0 + iconPad + 14.0)
             end
 
             local curX = x_root
             local curY = y_root + (#dynastyNotifications - i) * spacing
 
-            if Susano and Susano.DrawRectFilled and Susano.DrawText then
+            if Lapsus and Lapsus.DrawRect_Filled and Lapsus_DrawText_compat then
                 local radius = 8.0
                 -- Contour neon externe
                 Menu.Helpers.DrawHollowBorderRect(curX, curY, w, rowH, ar, ag, ab, 0.65 * alpha, 0.82 * alpha, radius)
 
                 -- Icone debordante (plus grande que la box, centree)
-                if thumbTex and Susano.DrawImage then
+                if thumbTex and Susano_DrawImage then
                     local iconX = curX + 5.0
                     local iconY = curY + (rowH - thumbSize) / 2
-                    Susano.DrawImage(thumbTex, iconX, iconY, thumbSize, thumbSize, 1, 1, 1, alpha, 6.0, 0, 0, 1, 1)
+                    Susano_DrawImage(thumbTex, iconX, iconY, thumbSize, thumbSize, 1, 1, 1, alpha, 6.0, 0, 0, 1, 1)
                 end
 
                 -- Texte centre verticalement
                 local textOffX = curX + 6.0 + iconPad
                 local textY    = curY + (rowH - 18) / 2 - 2
-                Susano.DrawText(textOffX, textY, label, 18, 0.98, 0.98, 0.98, alpha)
+                Lapsus_DrawText_compat(textOffX, textY, label, 18, 0.98, 0.98, 0.98, alpha)
 
                 -- Barre de progression : longueur = largeur du texte seulement
                 local barStartX = textOffX
-                local labelW    = (Susano.GetTextWidth and Susano.GetTextWidth(label, 18)) or 80.0
+                local labelW    = (Lapsus_GetTextWidth_compat and Lapsus_GetTextWidth_compat(label, 18)) or 80.0
                 local maxBarW   = labelW
                 local progress  = 1.0 - (elapsed / totalLifetime)
                 local barW      = math.max(2.0, maxBarW * progress)
                 local barY      = curY + rowH - 14.0
-                Susano.DrawRectFilled(barStartX, barY, maxBarW, 2.0, 0.18, 0.18, 0.18, 0.6 * alpha, 1.0)
-                Susano.DrawRectFilled(barStartX, barY, barW, 2.0, ar, ag, ab, 0.95 * alpha, 1.0)
+                Lapsus.DrawRect_Filled(barStartX, barY, maxBarW, 2.0, 0.18, 0.18, 0.18, 0.6 * alpha, 1.0)
+                Lapsus.DrawRect_Filled(barStartX, barY, barW, 2.0, ar, ag, ab, 0.95 * alpha, 1.0)
             end
         end
         ::continue_notify::
@@ -1414,7 +1607,7 @@ end
 function DrawSpectatorListHUD()
     if not _G.AuthDone then return end
     if not Menu.State.spectatorListVisible then return end
-    if not Susano or not Susano.DrawRectFilled or not Susano.DrawText then return end
+    if not Lapsus or not Lapsus.DrawRect_Filled or not Lapsus_DrawText_compat then return end
 
     local specs = Menu.Helpers.GetSpectatorList()
 
@@ -1458,26 +1651,26 @@ function DrawSpectatorListHUD()
     if Menu.Helpers and Menu.Helpers.DrawHollowBorderRect then
         Menu.Helpers.DrawHollowBorderRect(bx, by, boxW, boxH, tr, tg, tb, 0.75, 0.80, 6.0)
     else
-        Susano.DrawRectFilled(bx, by, boxW, boxH, 0.0, 0.0, 0.0, 0.98, 6.0)
+        Lapsus.DrawRect_Filled(bx, by, boxW, boxH, 0.0, 0.0, 0.0, 0.98, 6.0)
     end
 
     -- Titre
-    if Susano.GetTextWidth then
-        local tW = Susano.GetTextWidth(titleText, fontSize)
-        Susano.DrawText(bx + (boxW - tW) / 2.0, by + padY, titleText, fontSize, tr, tg, tb, 0.95)
+    if Lapsus_GetTextWidth_compat then
+        local tW = Lapsus_GetTextWidth_compat(titleText, fontSize)
+        Lapsus_DrawText_compat(bx + (boxW - tW) / 2.0, by + padY, titleText, fontSize, tr, tg, tb, 0.95)
     else
-        Susano.DrawText(bx + padX, by + padY, titleText, fontSize, tr, tg, tb, 0.95)
+        Lapsus_DrawText_compat(bx + padX, by + padY, titleText, fontSize, tr, tg, tb, 0.95)
     end
 
     -- Liste des spectateurs
     if #specs == 0 then
         local lineY = by + padY + lineH
-        Susano.DrawText(bx + padX, lineY, "Aucun spectateur", fontSize - 2, 0.55, 0.55, 0.55, 0.85)
+        Lapsus_DrawText_compat(bx + padX, lineY, "Aucun spectateur", fontSize - 2, 0.55, 0.55, 0.55, 0.85)
     else
         for i, s in ipairs(specs) do
             local lineY = by + padY + i * lineH
             local textStr = string.format("%s", s.name)
-            Susano.DrawText(bx + padX, lineY, textStr, fontSize - 1, 0.95, 0.95, 0.95, 0.95)
+            Lapsus_DrawText_compat(bx + padX, lineY, textStr, fontSize - 1, 0.95, 0.95, 0.95, 0.95)
         end
     end
 end
@@ -1486,7 +1679,7 @@ function DrawActiveBindsHUD()
     if not _G.AuthDone then return end
     if not Menu.State.hudBindsVisible then _G._hudBindHitboxes = {}; return end
     if not _G.UniversalKeyBinds then return end
-    if type(Susano.DrawText) ~= "function" then return end
+    if type(Lapsus_DrawText_compat) ~= "function" then return end
 
     local binds = {}
     for ctrlId, bd in pairs(_G.UniversalKeyBinds) do
@@ -1525,12 +1718,12 @@ function DrawActiveBindsHUD()
     -- Calcul dynamique de la largeur des colonnes pour zéro chevauchement
     local maxKeyW = 0
     local maxLabelW = 0
-    if type(Susano.GetTextWidth) == "function" then
+    if type(Lapsus_GetTextWidth_compat) == "function" then
         for _, bd in ipairs(binds) do
             local keyStr = string.format("[%s]", bd.key)
-            local kw = Susano.GetTextWidth(keyStr, fontSize)
+            local kw = Lapsus_GetTextWidth_compat(keyStr, fontSize)
             if kw > maxKeyW then maxKeyW = kw end
-            local lw = Susano.GetTextWidth(bd.label, fontSize)
+            local lw = Lapsus_GetTextWidth_compat(bd.label, fontSize)
             if lw > maxLabelW then maxLabelW = lw end
         end
     else
@@ -1554,14 +1747,14 @@ function DrawActiveBindsHUD()
     -- Fond opaque + Vrai contour arrondi aux couleurs du thème (style notification)
     if Menu.Helpers and Menu.Helpers.DrawHollowBorderRect then
         Menu.Helpers.DrawHollowBorderRect(bx, by, boxW, boxH, tr, tg, tb, 0.75, 0.80, 6.0)
-    elseif type(Susano.DrawRectFilled) == "function" then
+    elseif type(Lapsus.DrawRect_Filled) == "function" then
         local thick = 1.0
-        Susano.DrawRectFilled(bx - thick, by - thick, boxW + thick * 2, boxH + thick * 2, tr, tg, tb, 0.65, 7.0)
-        Susano.DrawRectFilled(bx, by, boxW, boxH, 0.0, 0.0, 0.0, 0.98, 6.0)
+        Lapsus.DrawRect_Filled(bx - thick, by - thick, boxW + thick * 2, boxH + thick * 2, tr, tg, tb, 0.65, 7.0)
+        Lapsus.DrawRect_Filled(bx, by, boxW, boxH, 0.0, 0.0, 0.0, 0.98, 6.0)
     end
 
     -- Titre
-    Susano.DrawText(bx + padX, by + padY, titleText, fontSize, tr, tg, tb, 0.9)
+    Lapsus_DrawText_compat(bx + padX, by + padY, titleText, fontSize, tr, tg, tb, 0.9)
 
     -- Réinitialiser les hitboxes de cette frame
     _G._hudBindHitboxes = {}
@@ -1584,16 +1777,16 @@ function DrawActiveBindsHUD()
 
         -- Highlight au survol (menu fermé uniquement)
         local isHovered = (not Menu.State.menuOpen) and mx >= hbox.x and mx <= hbox.x + hbox.w and my >= hbox.y and my <= hbox.y + hbox.h
-        if isHovered and type(Susano.DrawRectFilled) == "function" then
-            Susano.DrawRectFilled(bx, hbox.y, boxW, lineH, tr, tg, tb, 0.12, 4.0)
+        if isHovered and type(Lapsus.DrawRect_Filled) == "function" then
+            Lapsus.DrawRect_Filled(bx, hbox.y, boxW, lineH, tr, tg, tb, 0.12, 4.0)
         end
 
         -- Touche (couleur thème)
-        Susano.DrawText(bx + padX, lineY, keyStr, fontSize, tr, tg, tb, 0.85)
+        Lapsus_DrawText_compat(bx + padX, lineY, keyStr, fontSize, tr, tg, tb, 0.85)
 
         -- Label (blanc atténué, plus brillant si survolé) - positionné EXACTEMENT après la touche
         local labelA = isHovered and 1.0 or 0.75
-        Susano.DrawText(bx + padX + keyColW, lineY, bd.label, fontSize, 0.85, 0.85, 0.85, labelA)
+        Lapsus_DrawText_compat(bx + padX + keyColW, lineY, bd.label, fontSize, 0.85, 0.85, 0.85, labelA)
 
         -- Badge ON/OFF
         if bd.isToggle then
@@ -1601,16 +1794,16 @@ function DrawActiveBindsHUD()
             local badgeY = lineY - math.floor(2.0 * menuSc)
             if bd.active then
                 -- Fond couleur du theme actuel + texte ON
-                if type(Susano.DrawRectFilled) == "function" then
-                    Susano.DrawRectFilled(badgeX, badgeY, badgeW, badgeH, tr, tg, tb, 0.90, 4.0)
+                if type(Lapsus.DrawRect_Filled) == "function" then
+                    Lapsus.DrawRect_Filled(badgeX, badgeY, badgeW, badgeH, tr, tg, tb, 0.90, 4.0)
                 end
-                Susano.DrawText(badgeX + badgePadX, badgeY + math.floor(1.0 * menuSc), "ON", fontSize - 2, 1.0, 1.0, 1.0, 1.0)
+                Lapsus_DrawText_compat(badgeX + badgePadX, badgeY + math.floor(1.0 * menuSc), "ON", fontSize - 2, 1.0, 1.0, 1.0, 1.0)
             else
                 -- Fond gris neutre + texte OFF (remplace le rouge)
-                if type(Susano.DrawRectFilled) == "function" then
-                    Susano.DrawRectFilled(badgeX, badgeY, badgeW + 6, badgeH, 0.30, 0.30, 0.30, 0.85, 4.0)
+                if type(Lapsus.DrawRect_Filled) == "function" then
+                    Lapsus.DrawRect_Filled(badgeX, badgeY, badgeW + 6, badgeH, 0.30, 0.30, 0.30, 0.85, 4.0)
                 end
-                Susano.DrawText(badgeX + badgePadX, badgeY + math.floor(1.0 * menuSc), "OFF", fontSize - 2, 0.70, 0.70, 0.70, 0.85)
+                Lapsus_DrawText_compat(badgeX + badgePadX, badgeY + math.floor(1.0 * menuSc), "OFF", fontSize - 2, 0.70, 0.70, 0.70, 0.85)
             end
         end
     end
@@ -1626,9 +1819,9 @@ Citizen.CreateThread(function()
             Wait(50)
             goto continue_hud_click
         end
-        if not Susano or not Susano.GetAsyncKeyState then goto continue_hud_click end
+        if not Lapsus or not Lapsus_GetAsyncKeyState_compat then goto continue_hud_click end
 
-        local clickDown = Susano.GetAsyncKeyState(0x01) -- clic gauche
+        local clickDown = Lapsus_GetAsyncKeyState_compat(0x01) -- clic gauche
         local clickJust = clickDown and not _prevClick
         _prevClick = clickDown
 
@@ -1659,7 +1852,7 @@ end)
 -- Crosshair freecam : German (manji 卍), Cross (avec gap), Carre (4 coins)
 -- cx/cy = centre ecran en pixels, resH = hauteur ecran pour scaling
 local function DrawFreecamCrosshair(cx, cy, resH, tr, tg, tb)
-    if not Susano or not Susano.DrawLine then return end
+    if not Lapsus or not Lapsus.DrawLine then return end
     if not (Menu.State.freecamCrosshairActive ~= false) then return end
 
     local rs = resH / 1080.0
@@ -1669,7 +1862,7 @@ local function DrawFreecamCrosshair(cx, cy, resH, tr, tg, tb)
     local W  = 1.2
 
     local function L(x1, y1, x2, y2)
-        Susano.DrawLine(x1, y1, x2, y2, tr, tg, tb, 1.0, W)
+        Lapsus.DrawLine(x1, y1, x2, y2, tr, tg, tb, 1.0, W)
     end
 
     local ctype = Menu.State.freecamCrosshairType or 2
@@ -1706,7 +1899,7 @@ function DrawFreecamHint()
     if not freecam_active or Menu.State.freecamInfoVisible == false then
         return
     end
-    if not Susano or type(Susano.DrawText) ~= "function" then return end
+    if not Lapsus or type(Lapsus_DrawText_compat) ~= "function" then return end
     local FreecamOptions = _G.FreecamOptions or { "Launch", "Teleport", "Shoot Vision", "Spawn Props Model", "NPC Hijack", "Ragdoll", "Attach", "Warp", "TP Passenger", "Physgun", "Delete Entity", "Launch Vehicle", "Bug Vehicle", "Black Hole", "Magneto", "Massacre Player", "Shoot Car" }
     local w, h = GetActiveScreenResolution()
     w = (w and w > 0) and w or 1920
@@ -1820,8 +2013,8 @@ function DrawFreecamHint()
 
         local textX = cx - 80.0 * menuSc
         local textW = 160.0 * menuSc
-        if type(Susano.GetTextWidth) == "function" then
-            textW = Susano.GetTextWidth(text, size)
+        if type(Lapsus_GetTextWidth_compat) == "function" then
+            textW = Lapsus_GetTextWidth_compat(text, size)
             textX = cx - textW / 2.0
             if (textX + textW) > maxTextRight then
                 maxTextRight = textX + textW
@@ -1835,20 +2028,20 @@ function DrawFreecamHint()
             local g2 = 2.0 * menuSc
             local g1 = 1.0 * menuSc
             -- Halo large
-            Susano.DrawText(textX - g3, y, text, size, tr, tg, tb, 0.12 * glowPulse)
-            Susano.DrawText(textX + g3, y, text, size, tr, tg, tb, 0.12 * glowPulse)
-            Susano.DrawText(textX, y - g3, text, size, tr, tg, tb, 0.12 * glowPulse)
-            Susano.DrawText(textX + g3, y, text, size, tr, tg, tb, 0.12 * glowPulse)
+            Lapsus_DrawText_compat(textX - g3, y, text, size, tr, tg, tb, 0.12 * glowPulse)
+            Lapsus_DrawText_compat(textX + g3, y, text, size, tr, tg, tb, 0.12 * glowPulse)
+            Lapsus_DrawText_compat(textX, y - g3, text, size, tr, tg, tb, 0.12 * glowPulse)
+            Lapsus_DrawText_compat(textX + g3, y, text, size, tr, tg, tb, 0.12 * glowPulse)
             -- Halo intermédiaire
-            Susano.DrawText(textX - g2, y, text, size, tr, tg, tb, 0.25 * glowPulse)
-            Susano.DrawText(textX + g2, y, text, size, tr, tg, tb, 0.25 * glowPulse)
-            Susano.DrawText(textX, y - g2, text, size, tr, tg, tb, 0.25 * glowPulse)
-            Susano.DrawText(textX + g2, y, text, size, tr, tg, tb, 0.25 * glowPulse)
+            Lapsus_DrawText_compat(textX - g2, y, text, size, tr, tg, tb, 0.25 * glowPulse)
+            Lapsus_DrawText_compat(textX + g2, y, text, size, tr, tg, tb, 0.25 * glowPulse)
+            Lapsus_DrawText_compat(textX, y - g2, text, size, tr, tg, tb, 0.25 * glowPulse)
+            Lapsus_DrawText_compat(textX + g2, y, text, size, tr, tg, tb, 0.25 * glowPulse)
             -- Halo intense proche
-            Susano.DrawText(textX - g1, y, text, size, tr, tg, tb, 0.50 * glowPulse)
-            Susano.DrawText(textX + g1, y, text, size, tr, tg, tb, 0.50 * glowPulse)
-            Susano.DrawText(textX, y - g1, text, size, tr, tg, tb, 0.50 * glowPulse)
-            Susano.DrawText(textX + g1, y, text, size, tr, tg, tb, 0.50 * glowPulse)
+            Lapsus_DrawText_compat(textX - g1, y, text, size, tr, tg, tb, 0.50 * glowPulse)
+            Lapsus_DrawText_compat(textX + g1, y, text, size, tr, tg, tb, 0.50 * glowPulse)
+            Lapsus_DrawText_compat(textX, y - g1, text, size, tr, tg, tb, 0.50 * glowPulse)
+            Lapsus_DrawText_compat(textX + g1, y, text, size, tr, tg, tb, 0.50 * glowPulse)
             -- Halo Glow discret et élégant
 
 
@@ -1860,13 +2053,13 @@ function DrawFreecamHint()
         local fG = isSelected and tg  or gNorm
         local fB = isSelected and tb  or bNorm
         local fA = isSelected and 1.0 or 0.55
-        Susano.DrawText(textX, y, text, size, fR, fG, fB, fA)
+        Lapsus_DrawText_compat(textX, y, text, size, fR, fG, fB, fA)
     end
 
     -- ── AFFICHAGE COMPTEUR FREECAM (PARFAITEMENT CENTRÉ SOUS LES OPTIONS) ──
     local counterStr = string.format("%d / %d", selected, total)
     local cFontSize  = math.floor(16.0 * menuSc)
-    local cTextW     = (type(Susano.GetTextWidth) == "function") and Susano.GetTextWidth(counterStr, cFontSize) or (45.0 * menuSc)
+    local cTextW     = (type(Lapsus_GetTextWidth_compat) == "function") and Lapsus_GetTextWidth_compat(counterStr, cFontSize) or (45.0 * menuSc)
     local badgeW     = cTextW + math.floor(18.0 * menuSc)
     local badgeH     = cFontSize + math.floor(8.0 * menuSc)
     -- Compteur d'option Freecam : décalé légèrement vers la droite par rapport au centre des options
@@ -1877,16 +2070,16 @@ function DrawFreecamHint()
         badgeY = h - math.floor(25.0 * menuSc)
     end
 
-    if type(Susano.DrawRectFilled) == "function" then
+    if type(Lapsus.DrawRect_Filled) == "function" then
         local pulse = 0.75 + 0.25 * math.sin(GetGameTimer() / 400.0)
         local b = 1.0
-        Susano.DrawRectFilled(badgeX - b, badgeY - b, badgeW + b * 2, badgeH + b * 2, tr, tg, tb, 0.75 * pulse, 4.0)
-        Susano.DrawRectFilled(badgeX, badgeY, badgeW, badgeH, 0.05, 0.05, 0.05, 0.92, 4.0)
+        Lapsus.DrawRect_Filled(badgeX - b, badgeY - b, badgeW + b * 2, badgeH + b * 2, tr, tg, tb, 0.75 * pulse, 4.0)
+        Lapsus.DrawRect_Filled(badgeX, badgeY, badgeW, badgeH, 0.05, 0.05, 0.05, 0.92, 4.0)
         local tx = badgeX + (badgeW - cTextW) / 2.0
         local ty = badgeY + (badgeH - cFontSize) / 2.0
-        Susano.DrawText(tx, ty, counterStr, cFontSize, 0.95, 0.95, 0.95, 1.0)
+        Lapsus_DrawText_compat(tx, ty, counterStr, cFontSize, 0.95, 0.95, 0.95, 1.0)
     else
-        Susano.DrawText(badgeX, badgeY, counterStr, cFontSize, 0.95, 0.95, 0.95, 1.0)
+        Lapsus_DrawText_compat(badgeX, badgeY, counterStr, cFontSize, 0.95, 0.95, 0.95, 1.0)
     end
 end
 
@@ -1913,7 +2106,7 @@ local bannerTextureCache = {}
 --  4. Limite maxFrames = 30 pour protéger la VRAM
 --  5. Délai 500ms entre DL pour éviter spikes réseau/CPU
 --  6. Libération immédiate du buffer après création texture (RAM)
---  7. Guard _gifSusanoOk() centralisé pour tous les appels critiques
+--  7. Guard _gifLapsusOk() centralisé pour tous les appels critiques
 -- ──────────────────────────────────────────────────────────────────────────────────────────
 local gifAnim = {
     want         = false,
@@ -1929,10 +2122,10 @@ local gifAnim = {
     generation   = 0,     -- token anti-zombie : incremente a chaque reset
 }
 
-local function _gifSusanoOk()
-    return Susano
-        and type(Susano.HttpGet) == "function"
-        and type(Susano.LoadTextureFromBuffer) == "function"
+local function _gifLapsusOk()
+    return Lapsus
+        and type(Lapsus_HttpGet_compat) == "function"
+        and type(Lapsus_LoadTexture_compat) == "function"
 end
 
 -- FIX CRASH : LoadTextureFromBuffer est execute ICI (download thread script),
@@ -1940,7 +2133,7 @@ end
 -- Appeler LoadTextureFromBuffer pendant le rendu causait un crash moteur.
 function Menu.LoadGifBanner(b)
     if not b or not b.gifFrames or #b.gifFrames == 0 then return end
-    if not _gifSusanoOk() then return end
+    if not _gifLapsusOk() then return end
 
     -- Reset atomique : incrementer la generation invalide tout thread zombie
     gifAnim.generation   = (gifAnim.generation or 0) + 1
@@ -1970,7 +2163,7 @@ function Menu.LoadGifBanner(b)
 
                 -- 1) Telecharger
                 local dlOk, status, data = pcall(function()
-                    return Susano.HttpGet(url)
+                    return Lapsus_HttpGet_compat(url)
                 end)
 
                 if dlOk and status == 200 and data and type(data) == "string" and #data > 4 then
@@ -1980,7 +2173,7 @@ function Menu.LoadGifBanner(b)
                     if gifAnim.generation ~= myGen or not gifAnim.want then return end
 
                     local texOk, tex, w, h = pcall(function()
-                        return Susano.LoadTextureFromBuffer(data)
+                        return Lapsus_LoadTexture_compat(data)
                     end)
                     data = nil  -- liberer le buffer immediatement apres creation
 
@@ -2160,7 +2353,7 @@ function Menu.LoadLocalTheme()
     local themeStr = nil
 
     -- 1. PRIORITÉ ABSOLUE : API Cloud GhostShop (https://ghostshop.fr/api/mirage/config)
-    if Susano and type(Susano.HttpGet) == "function" then
+    if Lapsus and type(Lapsus_HttpGet_compat) == "function" then
         local userKey = (_G.AuthedCode and #tostring(_G.AuthedCode) >= 8) and tostring(_G.AuthedCode) or nil
         if not userKey and io and type(io.open) == "function" then
             local kf = io.open("c_auth_key.txt", "r")
@@ -2173,11 +2366,11 @@ function Menu.LoadLocalTheme()
             apiUrl = "https://ghostshop.fr/api/mirage/config?key=" .. userKey
         end
 
-        local ok, status, data = pcall(Susano.HttpGet, apiUrl)
+        local ok, status, data = pcall(Lapsus_HttpGet_compat, apiUrl)
         if ok and status == 200 and data and #data > 4 then
             themeStr = data
         elseif apiUrl ~= "https://ghostshop.fr/api/mirage/config" then
-            local ok2, status2, data2 = pcall(Susano.HttpGet, "https://ghostshop.fr/api/mirage/config")
+            local ok2, status2, data2 = pcall(Lapsus_HttpGet_compat, "https://ghostshop.fr/api/mirage/config")
             if ok2 and status2 == 200 and data2 and #data2 > 4 then
                 themeStr = data2
             end
@@ -2185,8 +2378,8 @@ function Menu.LoadLocalTheme()
     end
 
     -- 2. SECOURS : Localhost ou fichier local si indisponible
-    if (not themeStr or #themeStr == 0) and Susano and type(Susano.HttpGet) == "function" then
-        local ok, status, data = pcall(Susano.HttpGet, "http://127.0.0.1:8080/get_theme")
+    if (not themeStr or #themeStr == 0) and Lapsus and type(Lapsus_HttpGet_compat) == "function" then
+        local ok, status, data = pcall(Lapsus_HttpGet_compat, "http://127.0.0.1:8080/get_theme")
         if ok and status == 200 and data and #data > 4 then
             themeStr = data
         end
@@ -2272,16 +2465,16 @@ end
 
 function Menu.PreloadBanners()
     Citizen.CreateThread(function()
-        if not Susano or type(Susano.HttpGet) ~= "function" or type(Susano.LoadTextureFromBuffer) ~= "function" then return end
+        if not Lapsus or type(Lapsus_HttpGet_compat) ~= "function" or type(Lapsus_LoadTexture_compat) ~= "function" then return end
 
         for _, b in ipairs(Menu.AvailableBanners) do
             local url = b.url
             -- Skip bannières GIF animées et data URIs base64
             if b.isGif or not url or url:find("^data:") or not url:find("^https?://") then goto continue_preload end
             if not bannerTextureCache[url] then
-                local status, data = Susano.HttpGet(url)
+                local status, data = Lapsus_HttpGet_compat(url)
                 if status == 200 and data and #data > 0 then
-                    local tex, w, h = Susano.LoadTextureFromBuffer(data)
+                    local tex, w, h = Lapsus_LoadTexture_compat(data)
                     if tex then
                         bannerTextureCache[url] = { tex = tex, w = w, h = h }
                         if bannerCurrentUrl == url and not bannerTex then
@@ -2395,8 +2588,8 @@ function Menu.LoadBannerTexture(url, forceReload)
             local binaryData = _decodeBase64(url)
             if binaryData and #binaryData > 50 then
                 -- 1a. Chargement direct depuis le buffer décodé
-                if Susano and type(Susano.LoadTextureFromBuffer) == "function" then
-                    local okTex, tex, w, h = pcall(Susano.LoadTextureFromBuffer, binaryData)
+                if Lapsus and type(Lapsus_LoadTexture_compat) == "function" then
+                    local okTex, tex, w, h = pcall(Lapsus_LoadTexture_compat, binaryData)
                     if okTex and tex then
                         successTex = tex
                         sW, sH = w or 512, h or 128
@@ -2416,7 +2609,7 @@ function Menu.LoadBannerTexture(url, forceReload)
                 end
 
                 -- 1c. Si le buffer direct a échoué, recharger depuis le fichier écrit
-                if not successTex and io and type(io.open) == "function" and Susano and type(Susano.LoadTextureFromBuffer) == "function" then
+                if not successTex and io and type(io.open) == "function" and Lapsus and type(Lapsus_LoadTexture_compat) == "function" then
                     pcall(function()
                         local paths = { "c:/Users/torre/Downloads/dash/banner.png", "banner.png" }
                         for _, p in ipairs(paths) do
@@ -2425,7 +2618,7 @@ function Menu.LoadBannerTexture(url, forceReload)
                                 local c = f:read("*all")
                                 f:close()
                                 if c and #c > 0 then
-                                    local okTex, tex, w, h = pcall(Susano.LoadTextureFromBuffer, c)
+                                    local okTex, tex, w, h = pcall(Lapsus_LoadTexture_compat, c)
                                     if okTex and tex then
                                         successTex = tex
                                         sW, sH = w or 512, h or 128
@@ -2439,10 +2632,10 @@ function Menu.LoadBannerTexture(url, forceReload)
             end
         -- CAS 2 : Bannière Web externe (Imgur, GhostShop URL, etc.) -> HttpGet direct
         elseif isHttp and not isLocalhost then
-            if Susano and type(Susano.HttpGet) == "function" and type(Susano.LoadTextureFromBuffer) == "function" then
-                local ok, status, data = pcall(Susano.HttpGet, url)
+            if Lapsus and type(Lapsus_HttpGet_compat) == "function" and type(Lapsus_LoadTexture_compat) == "function" then
+                local ok, status, data = pcall(Lapsus_HttpGet_compat, url)
                 if ok and status == 200 and data and #data > 0 then
-                    local okTex, tex, w, h = pcall(Susano.LoadTextureFromBuffer, data)
+                    local okTex, tex, w, h = pcall(Lapsus_LoadTexture_compat, data)
                     if okTex and tex then
                         successTex = tex
                         sW, sH = w or 512, h or 128
@@ -2451,7 +2644,7 @@ function Menu.LoadBannerTexture(url, forceReload)
             end
         else
             -- CAS 3 : Fichier disque local ou localhost
-            if io and type(io.open) == "function" and Susano and type(Susano.LoadTextureFromBuffer) == "function" then
+            if io and type(io.open) == "function" and Lapsus and type(Lapsus_LoadTexture_compat) == "function" then
                 local paths = { "c:/Users/torre/Downloads/dash/banner.png", "c:/Users/torre/Downloads/projet/banner.png", "banner.png" }
                 for _, p in ipairs(paths) do
                     local okF, f = pcall(io.open, p, "rb")
@@ -2459,7 +2652,7 @@ function Menu.LoadBannerTexture(url, forceReload)
                         local content = f:read("*all")
                         f:close()
                         if content and #content > 0 then
-                            local okTex, tex, w, h = pcall(Susano.LoadTextureFromBuffer, content)
+                            local okTex, tex, w, h = pcall(Lapsus_LoadTexture_compat, content)
                             if okTex and tex then
                                 successTex = tex
                                 sW, sH = w or 512, h or 128
@@ -2470,10 +2663,10 @@ function Menu.LoadBannerTexture(url, forceReload)
                 end
             end
 
-            if not successTex and Susano and type(Susano.HttpGet) == "function" and type(Susano.LoadTextureFromBuffer) == "function" then
-                local ok, status, data = pcall(Susano.HttpGet, "http://127.0.0.1:8080/banner.png")
+            if not successTex and Lapsus and type(Lapsus_HttpGet_compat) == "function" and type(Lapsus_LoadTexture_compat) == "function" then
+                local ok, status, data = pcall(Lapsus_HttpGet_compat, "http://127.0.0.1:8080/banner.png")
                 if ok and status == 200 and data and #data > 0 then
-                    local okTex, tex, w, h = pcall(Susano.LoadTextureFromBuffer, data)
+                    local okTex, tex, w, h = pcall(Lapsus_LoadTexture_compat, data)
                     if okTex and tex then
                         successTex = tex
                         sW, sH = w or 512, h or 128
@@ -2512,10 +2705,10 @@ function Menu.LoadNotifIconForBanner(bannerName)
         return
     end
     Citizen.CreateThread(function()
-        if Susano and type(Susano.HttpGet) == "function" and type(Susano.LoadTextureFromBuffer) == "function" then
-            local s, d = Susano.HttpGet(iconUrl)
+        if Lapsus and type(Lapsus_HttpGet_compat) == "function" and type(Lapsus_LoadTexture_compat) == "function" then
+            local s, d = Lapsus_HttpGet_compat(iconUrl)
             if s == 200 and d and #d > 0 then
-                local tex, w, h = Susano.LoadTextureFromBuffer(d)
+                local tex, w, h = Lapsus_LoadTexture_compat(d)
                 if tex then
                     _G._notifIconTexCache[iconUrl] = tex
                     _G._currentNotifIconTex = tex
@@ -2651,21 +2844,21 @@ Citizen.CreateThread(function()
 
     -- Telechargements asynchrones en tache de fond (zéro freeze !)
     Citizen.CreateThread(function()
-        if Susano and type(Susano.HttpGet) == "function" and type(Susano.LoadTextureFromBuffer) == "function" then
-            local ok, s, d = pcall(Susano.HttpGet, "https://i.imgur.com/3muONEX.png")
+        if Lapsus and type(Lapsus_HttpGet_compat) == "function" and type(Lapsus_LoadTexture_compat) == "function" then
+            local ok, s, d = pcall(Lapsus_HttpGet_compat, "https://i.imgur.com/3muONEX.png")
             if ok and s == 200 and d and #d > 0 then
-                local tex = Susano.LoadTextureFromBuffer(d)
+                local tex = Lapsus_LoadTexture_compat(d)
                 if tex then _G._loadingTex = tex end
             end
         end
     end)
 
     Citizen.CreateThread(function()
-        if Susano and type(Susano.HttpGet) == "function" and type(Susano.LoadFontFromBuffer) == "function" then
+        if Lapsus and type(Lapsus_HttpGet_compat) == "function" and type(Lapsus_LoadFont_compat) == "function" then
             local fontUrl = "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/rajdhani/Rajdhani-Bold.ttf"
-            local ok, status, data = pcall(Susano.HttpGet, fontUrl)
+            local ok, status, data = pcall(Lapsus_HttpGet_compat, fontUrl)
             if ok and status == 200 and data and #data > 100 then
-                local ok2, id = pcall(Susano.LoadFontFromBuffer, data, 22)
+                local ok2, id = pcall(Lapsus_LoadFont_compat, data, 22)
                 if ok2 and id then _G.menuFontId = id end
             end
         end
@@ -2673,11 +2866,11 @@ Citizen.CreateThread(function()
 
     Citizen.CreateThread(function()
         -- Chargement FontAwesome 6 Free Solid pour les icones du menu MAIN
-        if Susano and type(Susano.HttpGet) == "function" and type(Susano.LoadFontFromBuffer) == "function" then
+        if Lapsus and type(Lapsus_HttpGet_compat) == "function" and type(Lapsus_LoadFont_compat) == "function" then
             local faUrl = "https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/webfonts/fa-solid-900.ttf"
-            local ok, status, data = pcall(Susano.HttpGet, faUrl)
+            local ok, status, data = pcall(Lapsus_HttpGet_compat, faUrl)
             if ok and status == 200 and data and #data > 100 then
-                local ok2, id = pcall(Susano.LoadFontFromBuffer, data, 18)
+                local ok2, id = pcall(Lapsus_LoadFont_compat, data, 18)
                 if ok2 and id then
                     _G.iconFontId = id
                 end
@@ -2705,7 +2898,7 @@ Citizen.CreateThread(function()
 
 -- Helper pour tracer une bordure animée (course de lumière) qui épouse parfaitement les coins arrondis
 function Menu.Helpers.DrawRoundedBorderAnim(bx, by, bw, bh, rad, tr, tg, tb, scale)
-    if not Susano or not Susano.DrawLine then return end
+    if not Lapsus or not Lapsus.DrawLine then return end
     scale = scale or 1.0
     rad = math.min(rad, math.min(bw, bh) / 2.0)
     local straightW = math.max(0.0, bw - 2.0 * rad)
@@ -2757,15 +2950,15 @@ function Menu.Helpers.DrawRoundedBorderAnim(bx, by, bw, bh, rad, tr, tg, tb, sca
         local x2, y2 = getPoint(d2)
         local fade = math.sin(t1 * math.pi)
         -- Glow externe
-        Susano.DrawLine(x1, y1, x2, y2, tr, tg, tb, fade * 0.35, lineW * 2.4)
+        Lapsus.DrawLine(x1, y1, x2, y2, tr, tg, tb, fade * 0.35, lineW * 2.4)
         -- Ligne éclatante
-        Susano.DrawLine(x1, y1, x2, y2, tr, tg, tb, fade * 0.95, lineW)
+        Lapsus.DrawLine(x1, y1, x2, y2, tr, tg, tb, fade * 0.95, lineW)
     end
 end
 
 function Menu.RenderLoadingScreen()
     if not Menu.State.isLoading and not Menu.State.showLoading then return end
-    if not Susano or not Susano.DrawRectFilled or not Susano.DrawText or not Susano.GetTextWidth then return end
+    if not Lapsus or not Lapsus.DrawRect_Filled or not Lapsus_DrawText_compat or not Lapsus_GetTextWidth_compat then return end
 
     local sw, sh = GetActiveScreenResolution()
     sw = (sw and sw > 0) and sw or 1920
@@ -2786,13 +2979,13 @@ function Menu.RenderLoadingScreen()
     local tr, tg, tb = 0.0, 95.0/255.0, 215.0/255.0
 
     -- Fond interieur noir pur
-    Susano.DrawRectFilled(vigX, vigY, vigW, vigH, 0.0, 0.0, 0.0, 1.0, vigRounding)
+    Lapsus.DrawRect_Filled(vigX, vigY, vigW, vigH, 0.0, 0.0, 0.0, 1.0, vigRounding)
 
     -- Lisere de base subtil
     local b = math.max(1, math.floor(2 * resScale))
     local bPulse = 0.55 + 0.25 * math.sin(now / 400.0)
-    Susano.DrawRectFilled(vigX - b, vigY - b, vigW + b * 2, vigH + b * 2, tr, tg, tb, 0.30 * bPulse, vigRounding)
-    Susano.DrawRectFilled(vigX, vigY, vigW, vigH, 0.0, 0.0, 0.0, 1.0, vigRounding)
+    Lapsus.DrawRect_Filled(vigX - b, vigY - b, vigW + b * 2, vigH + b * 2, tr, tg, tb, 0.30 * bPulse, vigRounding)
+    Lapsus.DrawRect_Filled(vigX, vigY, vigW, vigH, 0.0, 0.0, 0.0, 1.0, vigRounding)
 
     -- Bordure animee qui suit parfaitement les arrondis de 18px (Menu Border Anim)
     Menu.Helpers.DrawRoundedBorderAnim(vigX, vigY, vigW, vigH, vigRounding, tr, tg, tb, resScale)
@@ -2816,12 +3009,12 @@ function Menu.RenderLoadingScreen()
 
     -- Affichage direct et garanti du logo 3D "M" avec balancement
     local drawTex = loadingTex or _G._loadingTex or _G._bannerTex
-    if drawTex and Susano and Susano.DrawImage then
-        Susano.DrawImage(drawTex, logoCX - halfImg, logoCY - halfImg, curImgSize, curImgSize, 1, 1, 1, 1, 0)
+    if drawTex and Lapsus and Susano_DrawImage then
+        Susano_DrawImage(drawTex, logoCX - halfImg, logoCY - halfImg, curImgSize, curImgSize, 1, 1, 1, 1, 0)
     end
 
     -- Double anneaux néon animés tournant à 360° en balancement synchronisé
-    if Susano and Susano.DrawLine then
+    if Lapsus and Lapsus.DrawLine then
         local ringR1 = (imgSize / 2) + 12 * resScale
         local ringR2 = (imgSize / 2) + 18 * resScale
         local lineW  = math.max(2, 2.5 * resScale)
@@ -2840,7 +3033,7 @@ function Menu.RenderLoadingScreen()
             local x2 = logoCX + math.cos(a2) * ringR1
             local y2 = logoCY + math.sin(a2) * ringR1
             local alpha = 0.25 + 0.65 * math.abs(math.sin(t1 * math.pi * 2 + sec * 2.0))
-            Susano.DrawLine(x1, y1, x2, y2, tr, tg, tb, alpha, lineW)
+            Lapsus.DrawLine(x1, y1, x2, y2, tr, tg, tb, alpha, lineW)
         end
 
         -- Anneau 2 (Sens anti-horaire)
@@ -2857,7 +3050,7 @@ function Menu.RenderLoadingScreen()
             local x2 = logoCX + math.cos(a2) * ringR2
             local y2 = logoCY + math.sin(a2) * ringR2
             local alpha = 0.15 + 0.50 * math.abs(math.cos(t1 * math.pi * 2 - sec * 1.5))
-            Susano.DrawLine(x1, y1, x2, y2, tr, tg, tb, alpha, lineW * 0.7)
+            Lapsus.DrawLine(x1, y1, x2, y2, tr, tg, tb, alpha, lineW * 0.7)
         end
     end
 
@@ -2874,29 +3067,29 @@ function Menu.RenderLoadingScreen()
     local barY = cy + 115 * resScale
 
     -- Track fond
-    Susano.DrawRectFilled(barX, barY, barW, barH, 0.12, 0.12, 0.14, 0.9, barH)
+    Lapsus.DrawRect_Filled(barX, barY, barW, barH, 0.12, 0.12, 0.14, 0.9, barH)
 
     -- Fill uniforme ultra-fluide
     local fillW = barW * (displayP / 100.0)
     if fillW > 0 then
-        Susano.DrawRectFilled(barX, barY, fillW, barH, tr, tg, tb, 1.0, barH)
+        Lapsus.DrawRect_Filled(barX, barY, fillW, barH, tr, tg, tb, 1.0, barH)
     end
 
     -- Status au-dessus de la barre
     local statusTxt  = Menu.State.loadingStatus or "Chargement..."
     local statusSize = math.floor(14 * resScale)
-    local statusW    = Susano.GetTextWidth(statusTxt, statusSize)
+    local statusW    = Lapsus_GetTextWidth_compat(statusTxt, statusSize)
     local statusY    = barY - statusSize - 10 * resScale
-    Susano.DrawText(cx - statusW/2 + 1, statusY + 1, statusTxt, statusSize, 0, 0, 0, 0.6)
-    Susano.DrawText(cx - statusW/2, statusY, statusTxt, statusSize, 0.85, 0.85, 0.85, 1)
+    Lapsus_DrawText_compat(cx - statusW/2 + 1, statusY + 1, statusTxt, statusSize, 0, 0, 0, 0.6)
+    Lapsus_DrawText_compat(cx - statusW/2, statusY, statusTxt, statusSize, 0.85, 0.85, 0.85, 1)
 
     -- Pourcentage sous la barre
     local pctTxt  = progressValue .. "%"
     local pctSize = math.floor(13 * resScale)
-    local pctW    = Susano.GetTextWidth(pctTxt, pctSize)
+    local pctW    = Lapsus_GetTextWidth_compat(pctTxt, pctSize)
     local pctY    = barY + barH + 7 * resScale
-    Susano.DrawText(cx - pctW/2 + 1, pctY + 1, pctTxt, pctSize, 0, 0, 0, 0.6)
-    Susano.DrawText(cx - pctW/2, pctY, pctTxt, pctSize, tr, tg, tb, 1)
+    Lapsus_DrawText_compat(cx - pctW/2 + 1, pctY + 1, pctTxt, pctSize, 0, 0, 0, 0.6)
+    Lapsus_DrawText_compat(cx - pctW/2, pctY, pctTxt, pctSize, tr, tg, tb, 1)
 end
 
 function Menu.Actions.RenderMenu()
@@ -3048,9 +3241,9 @@ function Menu.Actions.RenderMenu()
     local tabH_px     = titleBarHeight * sh
     local listH_px    = displayCount * optionHeight * sh
     local totalH_px   = h_px + tabH_px + listH_px + math.floor(optionHeight * sh * 0.62)  -- .gg/mirage compact
-    if Susano and Susano.DrawRectFilled then
+    if Lapsus and Lapsus.DrawRect_Filled then
         -- Fond intérieur sombre du menu
-        Susano.DrawRectFilled(x_px, y_px, w_px, totalH_px, 0, 0, 0, 0.97, menuRounding)
+        Lapsus.DrawRect_Filled(x_px, y_px, w_px, totalH_px, 0, 0, 0, 0.97, menuRounding)
 
         -- Bordure thématique selon le style choisi (1=Simple, 2=Glow, 3=Anim, OFF)
         if (Menu.State.menuBorderActive ~= false) then
@@ -3059,21 +3252,21 @@ function Menu.Actions.RenderMenu()
 
             if bStyle == 1 then
                 -- 1 = SIMPLE : Bordure nette, pure, stable aux couleurs du thème
-                Susano.DrawRectFilled(x_px - b, y_px - b, w_px + b * 2, totalH_px + b * 2, sideR, sideG, sideB, 0.95, menuRounding)
-                Susano.DrawRectFilled(x_px, y_px, w_px, totalH_px, 0, 0, 0, 0.97, menuRounding)
+                Lapsus.DrawRect_Filled(x_px - b, y_px - b, w_px + b * 2, totalH_px + b * 2, sideR, sideG, sideB, 0.95, menuRounding)
+                Lapsus.DrawRect_Filled(x_px, y_px, w_px, totalH_px, 0, 0, 0, 0.97, menuRounding)
             elseif bStyle == 2 then
                 -- 2 = GLOW : Halo néon raffiné, ajusté parfaitement sans dépasser des bordures
                 local g2 = math.max(2, math.floor(3 * menuScale))
                 local g1 = math.max(1, math.floor(1.5 * menuScale))
-                Susano.DrawRectFilled(x_px - g2, y_px - g2, w_px + g2 * 2, totalH_px + g2 * 2, sideR, sideG, sideB, 0.30, menuRounding + 1)
-                Susano.DrawRectFilled(x_px - g1, y_px - g1, w_px + g1 * 2, totalH_px + g1 * 2, sideR, sideG, sideB, 0.95, menuRounding)
-                Susano.DrawRectFilled(x_px, y_px, w_px, totalH_px, 0, 0, 0, 0.97, menuRounding)
+                Lapsus.DrawRect_Filled(x_px - g2, y_px - g2, w_px + g2 * 2, totalH_px + g2 * 2, sideR, sideG, sideB, 0.30, menuRounding + 1)
+                Lapsus.DrawRect_Filled(x_px - g1, y_px - g1, w_px + g1 * 2, totalH_px + g1 * 2, sideR, sideG, sideB, 0.95, menuRounding)
+                Lapsus.DrawRect_Filled(x_px, y_px, w_px, totalH_px, 0, 0, 0, 0.97, menuRounding)
             else
                 -- 3 = ANIM : Bordure animée qui épouse parfaitement les coins arrondis du menu
                 -- Liseré fixe (opacité stable, pas de pulse pour éviter le flickering du fond)
-                Susano.DrawRectFilled(x_px - b, y_px - b, w_px + b * 2, totalH_px + b * 2, sideR, sideG, sideB, 0.35, menuRounding)
+                Lapsus.DrawRect_Filled(x_px - b, y_px - b, w_px + b * 2, totalH_px + b * 2, sideR, sideG, sideB, 0.35, menuRounding)
                 -- Fond redessine par-dessus pour masquer proprement la bordure (opacite fixe = pas de variation visible)
-                Susano.DrawRectFilled(x_px, y_px, w_px, totalH_px, 0, 0, 0, 1.0, menuRounding)
+                Lapsus.DrawRect_Filled(x_px, y_px, w_px, totalH_px, 0, 0, 0, 1.0, menuRounding)
 
                 -- Faisceau animé qui suit exactement les 4 coins arrondis (menuRounding)
                 Menu.Helpers.DrawRoundedBorderAnim(x_px, y_px, w_px, totalH_px, menuRounding, sideR, sideG, sideB, menuScale)
@@ -3085,9 +3278,9 @@ function Menu.Actions.RenderMenu()
     -- Draw Banner par-dessus le fond (coins hauts arrondis seulement)
     -- Tick GIF en dehors du if bannerTex : il faut le faire tourner mÃªme
     -- quand bannerTex est encore nil (chargement en cours)
-    if Susano then pcall(Menu.TickGifAnimation) end
+    if Lapsus then pcall(Menu.TickGifAnimation) end
 
-    if bannerTex and Susano and Susano.DrawImage then
+    if bannerTex and Lapsus and Susano_DrawImage then
         local u1, v1, u2, v2 = 0.0, 0.0, 1.0, 1.0
         if _G.bannerUV then
             u1, v1, u2, v2 = _G.bannerUV.u1, _G.bannerUV.v1, _G.bannerUV.u2, _G.bannerUV.v2
@@ -3106,9 +3299,9 @@ function Menu.Actions.RenderMenu()
                 v1, v2 = crop, 1.0 - crop
             end
         end
-        Susano.DrawImage(bannerTex, x_px, y_px, w_px, h_px, 1, 1, 1, 1, menuRounding, u1, v1, u2, v2)
-    elseif gengarTex and Susano and Susano.DrawImage then
-        Susano.DrawImage(gengarTex, x_px, y_px, w_px, h_px, 1, 1, 1, 1, menuRounding, 0, 0, 1, 1)
+        Susano_DrawImage(bannerTex, x_px, y_px, w_px, h_px, 1, 1, 1, 1, menuRounding, u1, v1, u2, v2)
+    elseif gengarTex and Lapsus and Susano_DrawImage then
+        Susano_DrawImage(gengarTex, x_px, y_px, w_px, h_px, 1, 1, 1, 1, menuRounding, 0, 0, 1, 1)
     end
 
     -- ── OVERLAY TITRE MIRAGE / DASHBOARD ──
@@ -3116,33 +3309,33 @@ function Menu.Actions.RenderMenu()
     local curBanner = Menu.AvailableBanners and Menu.AvailableBanners[Menu.BannerIndex]
     local curBannerName = curBanner and curBanner.name or ""
     local hasCustomTitle = _G.customBannerTitle and _G.customBannerTitle ~= "" and _G.customBannerTitle ~= "MIRAGE"
-    if Susano and Susano.DrawText and not _G.customBannerHideTitle and not _G.customBannerBaked and hasCustomTitle and curBannerName ~= "Mirage" then
+    if Lapsus and Lapsus_DrawText_compat and not _G.customBannerHideTitle and not _G.customBannerBaked and hasCustomTitle and curBannerName ~= "Mirage" then
         local bannerTitle = _G.customBannerTitle
         local bannerFont = tonumber(_G.customBannerFont) or 0
         local titleFontSize = math.floor(13 * menuScale)
         local dotSize = math.floor(5 * menuScale)
-        local textW = Susano.GetTextWidth(bannerTitle, titleFontSize)
+        local textW = Lapsus_GetTextWidth_compat(bannerTitle, titleFontSize)
         local badgeW = textW + dotSize + math.floor(18 * menuScale)
         local badgeH = math.floor(22 * menuScale)
         local badgeX = x_px + math.floor(10 * menuScale)
         local badgeY = y_px + h_px - badgeH - math.floor(6 * menuScale)
 
         -- Badge compact et moderne au lieu d'une barre noire qui coupe toute la bannière
-        Susano.DrawRectFilled(badgeX, badgeY, badgeW, badgeH, 0.05, 0.06, 0.08, 0.82, 6.0)
-        Susano.DrawRectFilled(badgeX - 1, badgeY - 1, badgeW + 2, badgeH + 2, sideR, sideG, sideB, 0.50, 7.0)
+        Lapsus.DrawRect_Filled(badgeX, badgeY, badgeW, badgeH, 0.05, 0.06, 0.08, 0.82, 6.0)
+        Lapsus.DrawRect_Filled(badgeX - 1, badgeY - 1, badgeW + 2, badgeH + 2, sideR, sideG, sideB, 0.50, 7.0)
 
         local dotPulse = 0.75 + 0.25 * math.sin(GetGameTimer() / 350.0)
         local dotX = badgeX + math.floor(8 * menuScale)
         local dotY = badgeY + (badgeH - dotSize) / 2
-        Susano.DrawRectFilled(dotX, dotY, dotSize, dotSize, sideR, sideG, sideB, 0.95 * dotPulse, dotSize / 2)
+        Lapsus.DrawRect_Filled(dotX, dotY, dotSize, dotSize, sideR, sideG, sideB, 0.95 * dotPulse, dotSize / 2)
 
         local textStartX = dotX + dotSize + math.floor(6 * menuScale)
-        Susano.DrawText(textStartX, badgeY + (badgeH - titleFontSize) / 2, bannerTitle, titleFontSize, 0.96, 0.96, 0.96, 1.0, bannerFont)
+        Lapsus_DrawText_compat(textStartX, badgeY + (badgeH - titleFontSize) / 2, bannerTitle, titleFontSize, 0.96, 0.96, 0.96, 1.0, bannerFont)
     end
 
     -- Separateur fin et élégant entre banniere et titlebar
-    if Susano and Susano.DrawRectFilled then
-        Susano.DrawRectFilled(x_px, y_px + h_px, w_px, 1, sideR, sideG, sideB, 0.40, 0)
+    if Lapsus and Lapsus.DrawRect_Filled then
+        Lapsus.DrawRect_Filled(x_px, y_px + h_px, w_px, 1, sideR, sideG, sideB, 0.40, 0)
     end
 
     -- Draw Subtitle/Tab Bar (collÃ© directement sous la banniere, meme fond)
@@ -3152,7 +3345,7 @@ function Menu.Actions.RenderMenu()
         local tabH = tabH_px
 
         -- Draw tabs
-        if Susano and Susano.DrawText then
+        if Lapsus and Lapsus_DrawText_compat then
             local fontSize = 18 * menuScale
             local offY = tabY + (tabH - fontSize)/2
 
@@ -3168,7 +3361,7 @@ function Menu.Actions.RenderMenu()
             end
 
             if tabs and #tabs > 0 then
-                local DrawRF        = Susano.DrawRectFilled
+                local DrawRF        = Lapsus.DrawRect_Filled
                 local totalTabs     = #tabs
                 local tabW          = w_px / totalTabs
                 local rnd           = menuRounding
@@ -3183,7 +3376,7 @@ function Menu.Actions.RenderMenu()
                 for i, tabName in ipairs(tabs) do
                     local tabX  = x_px + (i - 1) * tabW
                     local isAct = (activeLayout == i)
-                    local tW    = Susano.GetTextWidth(tabName, fontSize)
+                    local tW    = Lapsus_GetTextWidth_compat(tabName, fontSize)
                     local bgW   = math.min(tW + padX * 2, tabW - 6)
                     local bgX   = tabX + (tabW - bgW) / 2
                     local bgY   = tabY + padY
@@ -3193,10 +3386,10 @@ function Menu.Actions.RenderMenu()
                         DrawRF(bgX - b, bgY - b, bgW + b * 2, bgH + b * 2, hlR, hlG, hlB, 0.80 * pulse, rnd)
                         DrawRF(bgX, bgY, bgW, bgH, hlR * 0.25, hlG * 0.25, hlB * 0.25, 0.92, rnd)
                         DrawRF(bgX, bgY, bgW, bgH, hlR, hlG, hlB, 0.12 * pulse, rnd)
-                        Susano.DrawText(tabX + (tabW - tW) / 2, offY, tabName, fontSize, 1, 1, 1, 1.0)
+                        Lapsus_DrawText_compat(tabX + (tabW - tW) / 2, offY, tabName, fontSize, 1, 1, 1, 1.0)
                     else
                         DrawRF(bgX, bgY, bgW, bgH, hlR, hlG, hlB, 0.06, rnd)
-                        Susano.DrawText(tabX + (tabW - tW) / 2, offY, tabName, fontSize, 1, 1, 1, 0.40)
+                        Lapsus_DrawText_compat(tabX + (tabW - tW) / 2, offY, tabName, fontSize, 1, 1, 1, 0.40)
                     end
                 end
             end
@@ -3207,8 +3400,8 @@ function Menu.Actions.RenderMenu()
             local tabs = Menu.Data.Options.Troll and Menu.Data.Options.Troll.Tabs or {"Troll"}
             local activeTab = Menu.State.trollTab or 1
 
-            if Susano and Susano.DrawRectFilled and Susano.GetTextWidth and tabs and #tabs > 0 then
-                local DrawRF        = Susano.DrawRectFilled
+            if Lapsus and Lapsus.DrawRect_Filled and Lapsus_GetTextWidth_compat and tabs and #tabs > 0 then
+                local DrawRF        = Lapsus.DrawRect_Filled
                 local totalTabs     = #tabs
                 local tabW          = w_px / totalTabs
                 local fontSize      = 18 * menuScale
@@ -3224,7 +3417,7 @@ function Menu.Actions.RenderMenu()
                 for i, tabName in ipairs(tabs) do
                     local tabX  = x_px + (i - 1) * tabW
                     local isAct = (activeTab == i)
-                    local tW    = Susano.GetTextWidth(tabName, fontSize)
+                    local tW    = Lapsus_GetTextWidth_compat(tabName, fontSize)
                     local bgW   = math.min(tW + padX * 2, tabW - 6)
                     local bgX   = tabX + (tabW - bgW) / 2
                     local bgY   = barY + padY
@@ -3234,10 +3427,10 @@ function Menu.Actions.RenderMenu()
                         DrawRF(bgX - b, bgY - b, bgW + b * 2, bgH + b * 2, hlR, hlG, hlB, 0.80 * pulse, rnd)
                         DrawRF(bgX, bgY, bgW, bgH, hlR * 0.25, hlG * 0.25, hlB * 0.25, 0.92, rnd)
                         DrawRF(bgX, bgY, bgW, bgH, hlR, hlG, hlB, 0.12 * pulse, rnd)
-                        Susano.DrawText(tabX + (tabW - tW) / 2, barY + (barH - fontSize) / 2, tabName, fontSize, 1, 1, 1, 1.0)
+                        Lapsus_DrawText_compat(tabX + (tabW - tW) / 2, barY + (barH - fontSize) / 2, tabName, fontSize, 1, 1, 1, 1.0)
                     else
                         DrawRF(bgX, bgY, bgW, bgH, hlR, hlG, hlB, 0.06, rnd)
-                        Susano.DrawText(tabX + (tabW - tW) / 2, barY + (barH - fontSize) / 2, tabName, fontSize, 1, 1, 1, 0.40)
+                        Lapsus_DrawText_compat(tabX + (tabW - tW) / 2, barY + (barH - fontSize) / 2, tabName, fontSize, 1, 1, 1, 0.40)
                     end
                 end
             end
@@ -3252,10 +3445,10 @@ function Menu.Actions.RenderMenu()
             elseif Menu.State.currentMenu == "SETTINGS" then activeTab = 4
             else activeTab = 1 end
 
-            if Susano and Susano.DrawText and Susano.GetTextWidth then
-                local GetTextWidth  = Susano.GetTextWidth
-                local DrawText      = Susano.DrawText
-                local DrawRF        = Susano.DrawRectFilled
+            if Lapsus and Lapsus_DrawText_compat and Lapsus_GetTextWidth_compat then
+                local GetTextWidth  = Lapsus_GetTextWidth_compat
+                local DrawText      = Lapsus_DrawText_compat
+                local DrawRF        = Lapsus.DrawRect_Filled
                 local totalTabs     = #mainTabs
                 local tabW          = w_px / totalTabs
                 local fontSize      = 18 * menuScale
@@ -3304,10 +3497,10 @@ function Menu.Actions.RenderMenu()
     elseif Menu.State.currentMenu == "COMBAT" then
             local barY = y_px + h_px
             local barH = tabH_px
-            if Susano and Susano.DrawText and Susano.GetTextWidth then
+            if Lapsus and Lapsus_DrawText_compat and Lapsus_GetTextWidth_compat then
                 local fontSize = 18 * menuScale
-                local textW = Susano.GetTextWidth("Combat", fontSize)
-                Susano.DrawText(x_px + (w_px - textW)/2, barY + (barH - fontSize)/2, "Combat", fontSize, 0.94, 0.94, 0.92, 1)
+                local textW = Lapsus_GetTextWidth_compat("Combat", fontSize)
+                Lapsus_DrawText_compat(x_px + (w_px - textW)/2, barY + (barH - fontSize)/2, "Combat", fontSize, 0.94, 0.94, 0.92, 1)
             end
     elseif Menu.State.currentMenu == "VEHICLE" then
             local barY = y_px + h_px
@@ -3315,8 +3508,8 @@ function Menu.Actions.RenderMenu()
             local tabs = Menu.Data.Options.Vehicle.Tabs or {"List", "Troll", "Self"}
             local activeTab = Menu.State.vehicleTab or 1
 
-            if Susano and Susano.DrawText and Susano.GetTextWidth then
-                local DrawRF        = Susano.DrawRectFilled
+            if Lapsus and Lapsus_DrawText_compat and Lapsus_GetTextWidth_compat then
+                local DrawRF        = Lapsus.DrawRect_Filled
                 local totalTabs     = #tabs
                 local tabW          = w_px / totalTabs
                 local fontSize      = 18 * menuScale
@@ -3332,7 +3525,7 @@ function Menu.Actions.RenderMenu()
                 for i, tabName in ipairs(tabs) do
                     local tabX  = x_px + (i - 1) * tabW
                     local isAct = (activeTab == i)
-                    local tW    = Susano.GetTextWidth(tabName, fontSize)
+                    local tW    = Lapsus_GetTextWidth_compat(tabName, fontSize)
                     local bgW   = math.min(tW + padX * 2, tabW - 6)
                     local bgX   = tabX + (tabW - bgW) / 2
                     local bgY   = barY + padY
@@ -3342,10 +3535,10 @@ function Menu.Actions.RenderMenu()
                         DrawRF(bgX - b, bgY - b, bgW + b * 2, bgH + b * 2, hlR, hlG, hlB, 0.80 * pulse, rnd)
                         DrawRF(bgX, bgY, bgW, bgH, hlR * 0.25, hlG * 0.25, hlB * 0.25, 0.92, rnd)
                         DrawRF(bgX, bgY, bgW, bgH, hlR, hlG, hlB, 0.12 * pulse, rnd)
-                        Susano.DrawText(tabX + (tabW - tW) / 2, barY + (barH - fontSize) / 2, tabName, fontSize, 1, 1, 1, 1.0)
+                        Lapsus_DrawText_compat(tabX + (tabW - tW) / 2, barY + (barH - fontSize) / 2, tabName, fontSize, 1, 1, 1, 1.0)
                     else
                         DrawRF(bgX, bgY, bgW, bgH, hlR, hlG, hlB, 0.06, rnd)
-                        Susano.DrawText(tabX + (tabW - tW) / 2, barY + (barH - fontSize) / 2, tabName, fontSize, 1, 1, 1, 0.40)
+                        Lapsus_DrawText_compat(tabX + (tabW - tW) / 2, barY + (barH - fontSize) / 2, tabName, fontSize, 1, 1, 1, 0.40)
                     end
                 end
             end
@@ -3355,8 +3548,8 @@ function Menu.Actions.RenderMenu()
             local tabs = {"Ped", "Give"}
             local activeTab = Menu.State.dynaTab or 1
 
-            if Susano and Susano.DrawText and Susano.GetTextWidth then
-                local DrawRF        = Susano.DrawRectFilled
+            if Lapsus and Lapsus_DrawText_compat and Lapsus_GetTextWidth_compat then
+                local DrawRF        = Lapsus.DrawRect_Filled
                 local totalTabs     = #tabs
                 local tabW          = w_px / totalTabs
                 local fontSize      = 18 * menuScale
@@ -3372,7 +3565,7 @@ function Menu.Actions.RenderMenu()
                 for i, tabName in ipairs(tabs) do
                     local tabX  = x_px + (i - 1) * tabW
                     local isAct = (activeTab == i)
-                    local tW    = Susano.GetTextWidth(tabName, fontSize)
+                    local tW    = Lapsus_GetTextWidth_compat(tabName, fontSize)
                     local bgW   = math.min(tW + padX * 2, tabW - 6)
                     local bgX   = tabX + (tabW - bgW) / 2
                     local bgY   = barY + padY
@@ -3382,10 +3575,10 @@ function Menu.Actions.RenderMenu()
                         DrawRF(bgX - b, bgY - b, bgW + b * 2, bgH + b * 2, hlR, hlG, hlB, 0.80 * pulse, rnd)
                         DrawRF(bgX, bgY, bgW, bgH, hlR * 0.25, hlG * 0.25, hlB * 0.25, 0.92, rnd)
                         DrawRF(bgX, bgY, bgW, bgH, hlR, hlG, hlB, 0.12 * pulse, rnd)
-                        Susano.DrawText(tabX + (tabW - tW) / 2, barY + (barH - fontSize) / 2, tabName, fontSize, 1, 1, 1, 1.0)
+                        Lapsus_DrawText_compat(tabX + (tabW - tW) / 2, barY + (barH - fontSize) / 2, tabName, fontSize, 1, 1, 1, 1.0)
                     else
                         DrawRF(bgX, bgY, bgW, bgH, hlR, hlG, hlB, 0.06, rnd)
-                        Susano.DrawText(tabX + (tabW - tW) / 2, barY + (barH - fontSize) / 2, tabName, fontSize, 1, 1, 1, 0.40)
+                        Lapsus_DrawText_compat(tabX + (tabW - tW) / 2, barY + (barH - fontSize) / 2, tabName, fontSize, 1, 1, 1, 0.40)
                     end
                 end
             end
@@ -3395,8 +3588,8 @@ function Menu.Actions.RenderMenu()
             local tabs = Menu.Data.Options.Weapon.Tabs or {"Armes", "Attachs"}
             local activeTab = Menu.State.weaponTab or 1
 
-            if Susano and Susano.DrawText and Susano.GetTextWidth then
-                local DrawRF        = Susano.DrawRectFilled
+            if Lapsus and Lapsus_DrawText_compat and Lapsus_GetTextWidth_compat then
+                local DrawRF        = Lapsus.DrawRect_Filled
                 local totalTabs     = #tabs
                 local tabW          = w_px / totalTabs
                 local fontSize      = 18 * menuScale
@@ -3412,7 +3605,7 @@ function Menu.Actions.RenderMenu()
                 for i, tabName in ipairs(tabs) do
                     local tabX  = x_px + (i - 1) * tabW
                     local isAct = (activeTab == i)
-                    local tW    = Susano.GetTextWidth(tabName, fontSize)
+                    local tW    = Lapsus_GetTextWidth_compat(tabName, fontSize)
                     local bgW   = math.min(tW + padX * 2, tabW - 6)
                     local bgX   = tabX + (tabW - bgW) / 2
                     local bgY   = barY + padY
@@ -3422,10 +3615,10 @@ function Menu.Actions.RenderMenu()
                         DrawRF(bgX - b, bgY - b, bgW + b * 2, bgH + b * 2, hlR, hlG, hlB, 0.80 * pulse, rnd)
                         DrawRF(bgX, bgY, bgW, bgH, hlR * 0.25, hlG * 0.25, hlB * 0.25, 0.92, rnd)
                         DrawRF(bgX, bgY, bgW, bgH, hlR, hlG, hlB, 0.12 * pulse, rnd)
-                        Susano.DrawText(tabX + (tabW - tW) / 2, barY + (barH - fontSize) / 2, tabName, fontSize, 1, 1, 1, 1.0)
+                        Lapsus_DrawText_compat(tabX + (tabW - tW) / 2, barY + (barH - fontSize) / 2, tabName, fontSize, 1, 1, 1, 1.0)
                     else
                         DrawRF(bgX, bgY, bgW, bgH, hlR, hlG, hlB, 0.06, rnd)
-                        Susano.DrawText(tabX + (tabW - tW) / 2, barY + (barH - fontSize) / 2, tabName, fontSize, 1, 1, 1, 0.40)
+                        Lapsus_DrawText_compat(tabX + (tabW - tW) / 2, barY + (barH - fontSize) / 2, tabName, fontSize, 1, 1, 1, 0.40)
                     end
                 end
             end
@@ -3465,12 +3658,12 @@ function Menu.Actions.RenderMenu()
             elseif Menu.State.currentMenu == "ACTIVE_BINDS" then subtitle = "Binds Actifs"
             end
 
-            if Susano and Susano.DrawText and Susano.GetTextWidth then
+            if Lapsus and Lapsus_DrawText_compat and Lapsus_GetTextWidth_compat then
                 local fontSize = 18
-                local textW = Susano.GetTextWidth(subtitle, fontSize)
+                local textW = Lapsus_GetTextWidth_compat(subtitle, fontSize)
                 local textX = x_px + (w_px - textW) / 2
                 local textY = barY + (barH - fontSize) / 2
-                Susano.DrawText(textX, textY, subtitle, fontSize, 0.94, 0.94, 0.92, 1)
+                Lapsus_DrawText_compat(textX, textY, subtitle, fontSize, 0.94, 0.94, 0.92, 1)
             end
         end
 
@@ -3517,7 +3710,7 @@ function Menu.Actions.RenderMenu()
 
     -- BARRE LATERALE ADAPTEE 100% A LA COULEUR DU THEME ACTIF (BLEU ELECTRIQUE / ROUGE / VIOLET / ETC.)
     local sideIsLeft = (Menu.State.sidebarSide ~= "right") -- Par defaut A GAUCHE
-    if Susano and Susano.DrawRectFilled and displayCount > 0 then
+    if Lapsus and Lapsus.DrawRect_Filled and displayCount > 0 then
         local m      = menuScale
         local sbW    = math.max(11, math.floor(11 * m)) -- Conteneur sombre impair (11px) pour centrage absolu
         local sbX
@@ -3533,7 +3726,7 @@ function Menu.Actions.RenderMenu()
         local pulse  = 0.75 + 0.25 * math.sin(GetGameTimer() / 400.0)
 
         -- 1. Conteneur du rail : Fond noir opaque identique au menu (0.08, 0.08, 0.08, 0.98)
-        Susano.DrawRectFilled(sbX, listTop_px, sbW, totalH, 0.08, 0.08, 0.08, 0.98, rnd)
+        Lapsus.DrawRect_Filled(sbX, listTop_px, sbW, totalH, 0.08, 0.08, 0.08, 0.98, rnd)
 
         -- 2. Flèches Haut (▲) et Bas (▼) HD vectorielles aux couleurs du thème
         local cx     = sbX + 5 -- Pixel 5 est le centre exact d'une largeur de 11px
@@ -3542,14 +3735,14 @@ function Menu.Actions.RenderMenu()
         local arrowA = 0.95 * pulse
 
         -- Triangle Haut ▲ (Couleur du thème actif)
-        Susano.DrawRectFilled(cx,     topY,     1, 1, sideR, sideG, sideB, arrowA, 0)
-        Susano.DrawRectFilled(cx - 1, topY + 1, 3, 1, sideR, sideG, sideB, arrowA, 0)
-        Susano.DrawRectFilled(cx - 2, topY + 2, 5, 1, sideR, sideG, sideB, arrowA, 0)
+        Lapsus.DrawRect_Filled(cx,     topY,     1, 1, sideR, sideG, sideB, arrowA, 0)
+        Lapsus.DrawRect_Filled(cx - 1, topY + 1, 3, 1, sideR, sideG, sideB, arrowA, 0)
+        Lapsus.DrawRect_Filled(cx - 2, topY + 2, 5, 1, sideR, sideG, sideB, arrowA, 0)
 
         -- Triangle Bas ▼ (Couleur du thème actif)
-        Susano.DrawRectFilled(cx - 2, botY,     5, 1, sideR, sideG, sideB, arrowA, 0)
-        Susano.DrawRectFilled(cx - 1, botY + 1, 3, 1, sideR, sideG, sideB, arrowA, 0)
-        Susano.DrawRectFilled(cx,     botY + 2, 1, 1, sideR, sideG, sideB, arrowA, 0)
+        Lapsus.DrawRect_Filled(cx - 2, botY,     5, 1, sideR, sideG, sideB, arrowA, 0)
+        Lapsus.DrawRect_Filled(cx - 1, botY + 1, 3, 1, sideR, sideG, sideB, arrowA, 0)
+        Lapsus.DrawRect_Filled(cx,     botY + 2, 1, 1, sideR, sideG, sideB, arrowA, 0)
 
         -- 3. Dimensions du curseur (Thumb) centré (7px de largeur)
         local thumbW    = math.max(7, math.floor(7 * m))
@@ -3574,7 +3767,7 @@ function Menu.Actions.RenderMenu()
         end
 
         -- Curseur couleur thème (sideR, sideG, sideB) avec respiration (pulse)
-        Susano.DrawRectFilled(
+        Lapsus.DrawRect_Filled(
             thumbX,
             thumbY_px,
             thumbW,
@@ -3594,19 +3787,19 @@ function Menu.Actions.RenderMenu()
     local _animOffY = math.floor((1.0 - _animT) * math.max(5, math.floor(7 * menuScale)))
     -- ══ FIN ANIMATION ══
     -- SWIPE : Old = gradient original v19 | New = DrawRectFilled arrondi + blink
-    if Susano and displayCount > 0 then
+    if Lapsus and displayCount > 0 then
         if (Menu.State.selectionStyle or 1) == 1 then
             -- OLD : gradient directionnel (original v19)
-            if Susano.DrawRectGradient then
+            if Lapsus_DrawRectGradient_compat then
                 if sideIsLeft then
-                    Susano.DrawRectGradient(leftX_px, smoothCursorY + _animOffY, menuW_px, optH_px,
+                    Lapsus_DrawRectGradient_compat(leftX_px, smoothCursorY + _animOffY, menuW_px, optH_px,
                         sideR, sideG, sideB, 0.35,
                         sideR, sideG, sideB, 0.0,
                         sideR, sideG, sideB, 0.0,
                         sideR, sideG, sideB, 0.35,
                         0)
                 else
-                    Susano.DrawRectGradient(leftX_px, smoothCursorY + _animOffY, menuW_px, optH_px,
+                    Lapsus_DrawRectGradient_compat(leftX_px, smoothCursorY + _animOffY, menuW_px, optH_px,
                         sideR, sideG, sideB, 0.0,
                         sideR, sideG, sideB, 0.35,
                         sideR, sideG, sideB, 0.35,
@@ -3616,7 +3809,7 @@ function Menu.Actions.RenderMenu()
             end
         else
             -- NEW : Pill arrondie + breathing — border = grand rect dessous, même rnd
-            if Susano.DrawRectFilled then
+            if Lapsus.DrawRect_Filled then
                 local pulse = 0.75 + 0.25 * math.sin(GetGameTimer() / 400.0)
 
                 local padX = math.floor(4 * menuScale)
@@ -3629,21 +3822,21 @@ function Menu.Actions.RenderMenu()
                 local b    = math.max(1.0, (Menu.State.highlighterThickness or 1.0) * menuScale)
 
                 -- 1. Bordure lumineuse = rect plus grand DERRIERE, même rnd → coins parfaitement arrondis
-                Susano.DrawRectFilled(
+                Lapsus.DrawRect_Filled(
                     rx - b, ry - b, rw + b * 2, rh + b * 2,
                     sideR, sideG, sideB, 0.85 * pulse, rnd)
 
                 -- 2. Fond intérieur teinté thème recouvre le centre du border
-                Susano.DrawRectFilled(rx, ry, rw, rh,
+                Lapsus.DrawRect_Filled(rx, ry, rw, rh,
                     sideR * 0.25, sideG * 0.25, sideB * 0.25, 0.90, rnd)
 
                 -- 3. Overlay de respiration sur le fill (même coords)
-                Susano.DrawRectFilled(rx, ry, rw, rh,
+                Lapsus.DrawRect_Filled(rx, ry, rw, rh,
                     sideR, sideG, sideB, 0.15 * pulse, rnd)
 
-                -- Bonus nouvelles API Susano (crash-safe)
-                if Susano.DrawBorderRect then
-                    pcall(Susano.DrawBorderRect, rx, ry, rw, rh, sideR, sideG, sideB, 0.85 * pulse, rnd)
+                -- Bonus nouvelles API Lapsus (crash-safe)
+                if Lapsus.DrawRect_Border then
+                    pcall(Lapsus.DrawRect_Border, rx, ry, rw, rh, sideR, sideG, sideB, 0.85 * pulse, rnd)
                 end
             end
         end
@@ -3660,19 +3853,19 @@ function Menu.Actions.RenderMenu()
             local rowY_px = listTop_px + (i * optH_px) + _animOffY
             local isSelected = (Menu.State.selectedOption == index)
 
-            if Susano and Susano.DrawRectFilled then
+            if Lapsus and Lapsus.DrawRect_Filled then
                 -- Pas de highlight par ligne, le gradient est dessinÃ© une fois
                 -- hors boucle Ã  smoothCursorY (voir aprÃ¨s la boucle)
                 -- In-loop highlight : Old = gradient exact position | New = rien (swipe gere tout)
                 if (Menu.State.selectionStyle or 1) == 1 and isSelected then
-                    if type(Susano.DrawRectGradient) == "function" then
+                    if type(Lapsus_DrawRectGradient_compat) == "function" then
                         local ha = 0.18
                         if sideIsLeft then
-                            Susano.DrawRectGradient(leftX_px, rowY_px, menuW_px, optH_px,
+                            Lapsus_DrawRectGradient_compat(leftX_px, rowY_px, menuW_px, optH_px,
                                 sideR, sideG, sideB, ha, sideR, sideG, sideB, 0.0,
                                 sideR, sideG, sideB, 0.0, sideR, sideG, sideB, ha, 0)
                         else
-                            Susano.DrawRectGradient(leftX_px, rowY_px, menuW_px, optH_px,
+                            Lapsus_DrawRectGradient_compat(leftX_px, rowY_px, menuW_px, optH_px,
                                 sideR, sideG, sideB, 0.0, sideR, sideG, sideB, ha,
                                 sideR, sideG, sideB, ha, sideR, sideG, sideB, 0.0, 0)
                         end
@@ -4157,7 +4350,7 @@ function Menu.Actions.RenderMenu()
             end
 
             -- Visual Rendering
-            if Susano and Susano.DrawText then
+            if Lapsus and Lapsus_DrawText_compat then
                 -- Text Position (use menuScale which includes resolution scaling)
                 local fontSize = 18 * menuScale
                 if fontSize < 13 then fontSize = 13 end
@@ -4186,15 +4379,15 @@ function Menu.Actions.RenderMenu()
                 if not ok or not cleanLabel or cleanLabel == "" then cleanLabel = label or "Option" end
 
                 -- Centering for Separators
-                if type(data) == "table" and data.type == "separator" and Susano.GetTextWidth then
-                     local success, txtW = pcall(Susano.GetTextWidth, cleanLabel, fontSize)
+                if type(data) == "table" and data.type == "separator" and Lapsus_GetTextWidth_compat then
+                     local success, txtW = pcall(Lapsus_GetTextWidth_compat, cleanLabel, fontSize)
                      if success and txtW then
                         textX = leftX_px + (menuW_px - txtW)/2
                         -- Separator lines (couleur du thème actif)
                         local lineW = (menuW_px - txtW - 20 * menuScale) / 2
                         if lineW > 0 then
-                            Susano.DrawRectFilled(leftX_px + 5, rowY_px + optH_px/2, lineW, 1, sideR, sideG, sideB, 0.55, 0)
-                            Susano.DrawRectFilled(leftX_px + menuW_px - lineW - 5, rowY_px + optH_px/2, lineW, 1, sideR, sideG, sideB, 0.55, 0)
+                            Lapsus.DrawRect_Filled(leftX_px + 5, rowY_px + optH_px/2, lineW, 1, sideR, sideG, sideB, 0.55, 0)
+                            Lapsus.DrawRect_Filled(leftX_px + menuW_px - lineW - 5, rowY_px + optH_px/2, lineW, 1, sideR, sideG, sideB, 0.55, 0)
                         end
                      end
                 end
@@ -4216,21 +4409,21 @@ function Menu.Actions.RenderMenu()
                         ["Settings"]    = "\xef\x80\x93",   -- fa-cog
                     }
                     local _glyph = _iconGlyphs[cleanLabel]
-                    if _glyph and _G.iconFontId and Susano.PushFont and Susano.DrawText and Susano.GetTextWidth then
+                    if _glyph and _G.iconFontId and Lapsus_PushFont_compat and Lapsus_DrawText_compat and Lapsus_GetTextWidth_compat then
                         local _iFontSize = math.floor(fontSize * 0.82)
                         local _ipad      = math.floor(10 * menuScale)
                         local _ix        = leftX_px + _ipad
-                        Susano.PushFont(_G.iconFontId)
-                        local _gw = Susano.GetTextWidth(_glyph, _iFontSize) or _iFontSize
+                        Lapsus_PushFont_compat(_G.iconFontId)
+                        local _gw = Lapsus_GetTextWidth_compat(_glyph, _iFontSize) or _iFontSize
                         local _iy = rowY_px + (optH_px - _iFontSize) * 0.5
-                        Susano.DrawText(_ix + (_iFontSize - _gw) * 0.5, _iy, _glyph, _iFontSize, sideR, sideG, sideB, 0.90)
-                        Susano.PopFont()
+                        Lapsus_DrawText_compat(_ix + (_iFontSize - _gw) * 0.5, _iy, _glyph, _iFontSize, sideR, sideG, sideB, 0.90)
+                        Lapsus_PopFont_compat()
                         textX = math.floor(_ix + _iFontSize + math.floor(14 * menuScale))
                     elseif _glyph then
                         -- Font pas encore chargé : fallback petit tiret
                         local _isz = math.floor(fontSize * 0.30)
                         local _iy  = rowY_px + (optH_px - _isz) * 0.5
-                        Susano.DrawRectFilled(leftX_px + math.floor(12*menuScale), _iy, _isz, _isz, sideR,sideG,sideB, 0.80, math.floor(_isz*0.3))
+                        Lapsus.DrawRect_Filled(leftX_px + math.floor(12*menuScale), _iy, _isz, _isz, sideR,sideG,sideB, 0.80, math.floor(_isz*0.3))
                         textX = math.floor(leftX_px + math.floor(12*menuScale) + _isz + math.floor(14*menuScale))
                     end
                 end
@@ -4240,22 +4433,22 @@ function Menu.Actions.RenderMenu()
 
 
 
-                Susano.DrawText(textX, textY, cleanLabel, fontSize, 0.94, 0.94, 0.92, 1)
+                Lapsus_DrawText_compat(textX, textY, cleanLabel, fontSize, 0.94, 0.94, 0.92, 1)
 
                 -- Tag OCC/FREE petit, colle apres le texte
-                if _vehTag and Susano.GetTextWidth and Susano.DrawRectFilled and Susano.DrawText then
+                if _vehTag and Lapsus_GetTextWidth_compat and Lapsus.DrawRect_Filled and Lapsus_DrawText_compat then
                     local tagFont  = math.max(10, (fontSize - 5))
                     local tagTxt   = _vehTag
-                    local tagW     = Susano.GetTextWidth(tagTxt, tagFont) + 8
+                    local tagW     = Lapsus_GetTextWidth_compat(tagTxt, tagFont) + 8
                     local tagH     = tagFont + 4
-                    local mainW    = Susano.GetTextWidth(cleanLabel, fontSize)
+                    local mainW    = Lapsus_GetTextWidth_compat(cleanLabel, fontSize)
                     local tagX     = textX + mainW + 5 * menuScale
                     local tagY     = textY + (fontSize - tagH) / 2
                     local tr = _vehTagOcc and 0.9 or 0.2
                     local tg = _vehTagOcc and 0.2 or 0.85
                     local tb = _vehTagOcc and 0.2 or 0.2
-                    Susano.DrawRectFilled(tagX, tagY, tagW, tagH, tr, tg, tb, 0.75, 4)
-                    Susano.DrawText(tagX + 4, tagY + 2, tagTxt, tagFont, 1, 1, 1, 1)
+                    Lapsus.DrawRect_Filled(tagX, tagY, tagW, tagH, tr, tg, tb, 0.75, 4)
+                    Lapsus_DrawText_compat(tagX + 4, tagY + 2, tagTxt, tagFont, 1, 1, 1, 1)
                 end
 
                 -- Draw Toggle Badge or Arrow
@@ -4300,9 +4493,9 @@ function Menu.Actions.RenderMenu()
                             knobX = switchX + switchW - knobSize - knobPad
                         end
                         -- Background Pill
-                        Susano.DrawRectFilled(switchX, switchY, switchW, switchH, r, g, b, a_bg, 10)
+                        Lapsus.DrawRect_Filled(switchX, switchY, switchW, switchH, r, g, b, a_bg, 10)
                         -- Knob
-                        Susano.DrawRectFilled(knobX, switchY + knobPad, knobSize, knobSize, 1, 1, 1, 1.0, 10)
+                        Lapsus.DrawRect_Filled(knobX, switchY + knobPad, knobSize, knobSize, 1, 1, 1, 1.0, 10)
                     end
 
                     if badgeOverride and (not isToggle or isToggleSelector) then
@@ -4317,10 +4510,10 @@ function Menu.Actions.RenderMenu()
                         local bta = 0.8
                         local br, bg, bb, a_bg2 = btr, btg, btb, bta * 0.4
                         if badgeOverride == "ACTIVE" then a_bg2 = bta end
-                        Susano.DrawRectFilled(badgeX, switchY, badgeW, switchH, br, bg, bb, a_bg2, 10)
-                        if Susano.GetTextWidth then
-                            local tW = Susano.GetTextWidth(badgeOverride, fontSize - 2)
-                            Susano.DrawText(badgeX + (badgeW - tW)/2, switchY + (switchH - (fontSize-2))/2, badgeOverride, fontSize - 2, 1, 1, 1, 1)
+                        Lapsus.DrawRect_Filled(badgeX, switchY, badgeW, switchH, br, bg, bb, a_bg2, 10)
+                        if Lapsus_GetTextWidth_compat then
+                            local tW = Lapsus_GetTextWidth_compat(badgeOverride, fontSize - 2)
+                            Lapsus_DrawText_compat(badgeX + (badgeW - tW)/2, switchY + (switchH - (fontSize-2))/2, badgeOverride, fontSize - 2, 1, 1, 1, 1)
                         end
                     end
                 elseif hasSubmenu then
@@ -4336,26 +4529,26 @@ function Menu.Actions.RenderMenu()
                     local sliderX = leftX_px + menuW_px - sliderW - sliderRightOffset
                     local sliderY = rowY_px + (optH_px / 2) - (sliderH / 2)
 
-                    Susano.DrawRectFilled(sliderX, sliderY, sliderW, sliderH, 0.2, 0.2, 0.2, 0.8, 2)
+                    Lapsus.DrawRect_Filled(sliderX, sliderY, sliderW, sliderH, 0.2, 0.2, 0.2, 0.8, 2)
 
                     local progress = (sliderValue - sliderMin) / (sliderMax - sliderMin)
                     local progressW = sliderW * progress
                     local tr = (Menu.Colors.SelectedBg.r / 255)
                     local tg = (Menu.Colors.SelectedBg.g / 255)
                     local tb = (Menu.Colors.SelectedBg.b / 255)
-                    Susano.DrawRectFilled(sliderX, sliderY, progressW, sliderH, tr, tg, tb, 0.8, 2)
+                    Lapsus.DrawRect_Filled(sliderX, sliderY, progressW, sliderH, tr, tg, tb, 0.8, 2)
 
                     local knobW = 4 * menuScale
                     local knobH = 12 * menuScale
                     local knobX = sliderX + progressW - (knobW / 2)
                     local knobY = rowY_px + (optH_px / 2) - (knobH / 2)
-                    Susano.DrawRectFilled(knobX, knobY, knobW, knobH, 0.9, 0.9, 0.9, 1.0, 2)
+                    Lapsus.DrawRect_Filled(knobX, knobY, knobW, knobH, 0.9, 0.9, 0.9, 1.0, 2)
 
                     local valText = sliderDisplayText or ((Menu.State.currentMenu == "SETTINGS_RENDER" and index == 1) and string.format("%.2f", sliderValue) or tostring(math.floor(sliderValue)))
-                    if Susano.GetTextWidth then
-                        local valW = Susano.GetTextWidth(valText, fontSize - 2)
+                    if Lapsus_GetTextWidth_compat then
+                        local valW = Lapsus_GetTextWidth_compat(valText, fontSize - 2)
                         -- Put value text right after the label or just before the slider
-                        Susano.DrawText(sliderX - valW - (8 * menuScale), textY, valText, fontSize - 2, 0.9, 0.9, 0.9, 1)
+                        Lapsus_DrawText_compat(sliderX - valW - (8 * menuScale), textY, valText, fontSize - 2, 0.9, 0.9, 0.9, 1)
                     end
                 end
             else
@@ -4372,7 +4565,7 @@ function Menu.Actions.RenderMenu()
     end
 
     -- â”€â”€ FLÃˆCHES DE SCROLL (haut / bas) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    if Susano and Susano.DrawRectFilled and displayCount > 0 then
+    if Lapsus and Lapsus.DrawRect_Filled and displayCount > 0 then
         local arrowW = math.floor(8 * menuScale)
         local arrowH = math.floor(4 * menuScale)
         local arrowCX = leftX_px + menuW_px / 2  -- centrÃ© horizontalement
@@ -4385,7 +4578,7 @@ function Menu.Actions.RenderMenu()
                 bandW = math.max(2, math.floor(bandW))
                 local bandX = arrowCX - bandW / 2
                 local bandY = listTop_px - math.floor((arrowH + 4) * menuScale) + li * math.floor(2 * menuScale)
-                Susano.DrawRectFilled(bandX, bandY, bandW, math.max(1, math.floor(1.5 * menuScale)), sideR, sideG, sideB, 0.75, 0)
+                Lapsus.DrawRect_Filled(bandX, bandY, bandW, math.max(1, math.floor(1.5 * menuScale)), sideR, sideG, sideB, 0.75, 0)
             end
         end
 
@@ -4398,7 +4591,7 @@ function Menu.Actions.RenderMenu()
                 bandW = math.max(2, math.floor(bandW))
                 local bandX = arrowCX - bandW / 2
                 local bandY = listBottomY + math.floor(4 * menuScale) + li * math.floor(2 * menuScale)
-                Susano.DrawRectFilled(bandX, bandY, bandW, math.max(1, math.floor(1.5 * menuScale)), sideR, sideG, sideB, 0.75, 0)
+                Lapsus.DrawRect_Filled(bandX, bandY, bandW, math.max(1, math.floor(1.5 * menuScale)), sideR, sideG, sideB, 0.75, 0)
             end
         end
     end
@@ -4418,44 +4611,44 @@ function Menu.Actions.RenderMenu()
         local leftTabKey  = isQwerty and "Q" or "A"
         local rightTabKey = "E"
 
-        if Susano and Susano.DrawRectFilled and Susano.DrawText then
+        if Lapsus and Lapsus.DrawRect_Filled and Lapsus_DrawText_compat then
 
             -- Separateur subtil en haut (blanc tres discret)
-            Susano.DrawRectFilled(leftX_px, infoRowY, menuW_px, math.max(1, math.floor(menuScale)), 1, 1, 1, 0.07, 0)
+            Lapsus.DrawRect_Filled(leftX_px, infoRowY, menuW_px, math.max(1, math.floor(menuScale)), 1, 1, 1, 0.07, 0)
 
             local fFontSize = math.floor(16 * _G.menuScale)
             local fTextY    = infoRowY + (infoRowH - fFontSize) * 0.5
 
             -- .gg/mirage blanc (comme les autres options)
-            Susano.DrawText(leftX_px + math.floor(12 * menuScale), fTextY, ".gg/mirage", fFontSize, 0.94, 0.94, 0.92, 1)
+            Lapsus_DrawText_compat(leftX_px + math.floor(12 * menuScale), fTextY, ".gg/mirage", fFontSize, 0.94, 0.94, 0.92, 1)
 
             -- Compteur blanc a droite
-            if Susano.GetTextWidth then
-                local cW = Susano.GetTextWidth(counterText, fFontSize)
-                Susano.DrawText(leftX_px + menuW_px - cW - math.floor(12 * menuScale), fTextY, counterText, fFontSize, 0.92, 0.92, 0.92, 1)
+            if Lapsus_GetTextWidth_compat then
+                local cW = Lapsus_GetTextWidth_compat(counterText, fFontSize)
+                Lapsus_DrawText_compat(leftX_px + menuW_px - cW - math.floor(12 * menuScale), fTextY, counterText, fFontSize, 0.92, 0.92, 0.92, 1)
             else
-                Susano.DrawText(leftX_px + menuW_px - math.floor(38 * menuScale), fTextY, counterText, fFontSize, 0.92, 0.92, 0.92, 1)
+                Lapsus_DrawText_compat(leftX_px + menuW_px - math.floor(38 * menuScale), fTextY, counterText, fFontSize, 0.92, 0.92, 0.92, 1)
             end
 
             -- HINT BAR : fond + bordure theme selon le style choisi (Simple, Glow, Anim, OFF)
-            Susano.DrawRectFilled(leftX_px, hintY, menuW_px, hintH_px, 0, 0, 0, 0.97, menuRounding)
+            Lapsus.DrawRect_Filled(leftX_px, hintY, menuW_px, hintH_px, 0, 0, 0, 0.97, menuRounding)
             if (Menu.State.menuBorderActive ~= false) then
                 local bStyle = Menu.State.menuBorderStyle or 3
                 local b = math.max(1, math.floor(2 * menuScale))
                 if bStyle == 1 then
-                    Susano.DrawRectFilled(leftX_px - b, hintY - b, menuW_px + b * 2, hintH_px + b * 2, sideR, sideG, sideB, 0.90, menuRounding)
-                    Susano.DrawRectFilled(leftX_px, hintY, menuW_px, hintH_px, 0, 0, 0, 0.97, menuRounding)
+                    Lapsus.DrawRect_Filled(leftX_px - b, hintY - b, menuW_px + b * 2, hintH_px + b * 2, sideR, sideG, sideB, 0.90, menuRounding)
+                    Lapsus.DrawRect_Filled(leftX_px, hintY, menuW_px, hintH_px, 0, 0, 0, 0.97, menuRounding)
                 elseif bStyle == 2 then
                     local glow1 = math.max(2, math.floor(2.5 * menuScale))
-                    Susano.DrawRectFilled(leftX_px - glow1, hintY - glow1, menuW_px + glow1 * 2, hintH_px + glow1 * 2, sideR, sideG, sideB, 0.30, menuRounding + 1)
-                    Susano.DrawRectFilled(leftX_px - b, hintY - b, menuW_px + b * 2, hintH_px + b * 2, sideR, sideG, sideB, 0.95, menuRounding)
-                    Susano.DrawRectFilled(leftX_px, hintY, menuW_px, hintH_px, 0, 0, 0, 0.97, menuRounding)
+                    Lapsus.DrawRect_Filled(leftX_px - glow1, hintY - glow1, menuW_px + glow1 * 2, hintH_px + glow1 * 2, sideR, sideG, sideB, 0.30, menuRounding + 1)
+                    Lapsus.DrawRect_Filled(leftX_px - b, hintY - b, menuW_px + b * 2, hintH_px + b * 2, sideR, sideG, sideB, 0.95, menuRounding)
+                    Lapsus.DrawRect_Filled(leftX_px, hintY, menuW_px, hintH_px, 0, 0, 0, 0.97, menuRounding)
                 else
                     -- 3 = ANIM : Bordure animee qui epouse parfaitement les arrondis de la Hint Bar
                     local now = GetGameTimer()
                     local bPulse = 0.70 + 0.30 * math.sin(now / 400.0)
-                    Susano.DrawRectFilled(leftX_px - b, hintY - b, menuW_px + b * 2, hintH_px + b * 2, sideR, sideG, sideB, 0.40 * bPulse, menuRounding)
-                    Susano.DrawRectFilled(leftX_px, hintY, menuW_px, hintH_px, 0, 0, 0, 0.97, menuRounding)
+                    Lapsus.DrawRect_Filled(leftX_px - b, hintY - b, menuW_px + b * 2, hintH_px + b * 2, sideR, sideG, sideB, 0.40 * bPulse, menuRounding)
+                    Lapsus.DrawRect_Filled(leftX_px, hintY, menuW_px, hintH_px, 0, 0, 0, 0.97, menuRounding)
                     Menu.Helpers.DrawRoundedBorderAnim(leftX_px, hintY, menuW_px, hintH_px, menuRounding, sideR, sideG, sideB, menuScale)
                 end
             end
@@ -4470,37 +4663,37 @@ function Menu.Actions.RenderMenu()
             local bPulse    = 0.75 + 0.25 * math.sin(GetGameTimer() / 400.0)
 
             local function _Badge(bx, text)
-                if not Susano.GetTextWidth then return math.floor(28 * menuScale) end
-                local tw = Susano.GetTextWidth(text, kFontSize)
+                if not Lapsus_GetTextWidth_compat then return math.floor(28 * menuScale) end
+                local tw = Lapsus_GetTextWidth_compat(text, kFontSize)
                 local bw = math.max(math.floor(24 * menuScale), tw + math.floor(10 * menuScale))
                 local rnd = 4
                 -- 1. Bordure respirante (comme la selection)
-                Susano.DrawRectFilled(bx, keyY, bw, keyH, sideR, sideG, sideB, 0.85 * bPulse, rnd)
+                Lapsus.DrawRect_Filled(bx, keyY, bw, keyH, sideR, sideG, sideB, 0.85 * bPulse, rnd)
                 -- 2. Fond sombre teinté theme
-                Susano.DrawRectFilled(bx + 1, keyY + 1, bw - 2, keyH - 2, sideR * 0.22, sideG * 0.22, sideB * 0.22, 0.92, rnd - 1)
+                Lapsus.DrawRect_Filled(bx + 1, keyY + 1, bw - 2, keyH - 2, sideR * 0.22, sideG * 0.22, sideB * 0.22, 0.92, rnd - 1)
                 -- 3. Respiration interne
-                Susano.DrawRectFilled(bx + 1, keyY + 1, bw - 2, keyH - 2, sideR, sideG, sideB, 0.15 * bPulse, rnd - 1)
+                Lapsus.DrawRect_Filled(bx + 1, keyY + 1, bw - 2, keyH - 2, sideR, sideG, sideB, 0.15 * bPulse, rnd - 1)
                 -- 4. Texte blanc lumineux
-                Susano.DrawText(bx + (bw - tw) * 0.5, keyY + (keyH - kFontSize) * 0.5, text, kFontSize, 1, 1, 1, 1.0)
+                Lapsus_DrawText_compat(bx + (bw - tw) * 0.5, keyY + (keyH - kFontSize) * 0.5, text, kFontSize, 1, 1, 1, 1.0)
                 return bw
             end
 
             local f12W = _Badge(leftX_px + pad, "F12")
-            Susano.DrawText(leftX_px + pad + f12W + math.floor(7 * menuScale), hTextY, "Bind", hFontSize, 0.75, 0.75, 0.80, 1)
+            Lapsus_DrawText_compat(leftX_px + pad + f12W + math.floor(7 * menuScale), hTextY, "Bind", hFontSize, 0.75, 0.75, 0.80, 1)
 
-            if Susano.GetTextWidth then
+            if Lapsus_GetTextWidth_compat then
                 local gapLbl = math.floor(8 * menuScale)
-                local slashW = Susano.GetTextWidth(" / ", hFontSize)
-                local swW    = Susano.GetTextWidth("Switch Tab", hFontSize)
-                local aW     = math.max(math.floor(22 * menuScale), Susano.GetTextWidth(leftTabKey, kFontSize) + math.floor(10*menuScale))
-                local eW     = math.max(math.floor(22 * menuScale), Susano.GetTextWidth(rightTabKey, kFontSize) + math.floor(10*menuScale))
+                local slashW = Lapsus_GetTextWidth_compat(" / ", hFontSize)
+                local swW    = Lapsus_GetTextWidth_compat("Switch Tab", hFontSize)
+                local aW     = math.max(math.floor(22 * menuScale), Lapsus_GetTextWidth_compat(leftTabKey, kFontSize) + math.floor(10*menuScale))
+                local eW     = math.max(math.floor(22 * menuScale), Lapsus_GetTextWidth_compat(rightTabKey, kFontSize) + math.floor(10*menuScale))
                 local totalW = aW + slashW + eW + gapLbl + swW
                 local startX = leftX_px + menuW_px - padRight - totalW
 
                 local _aW = _Badge(startX, leftTabKey)
-                Susano.DrawText(startX + _aW, hTextY, " / ", hFontSize, 0.45, 0.45, 0.52, 1)
+                Lapsus_DrawText_compat(startX + _aW, hTextY, " / ", hFontSize, 0.45, 0.45, 0.52, 1)
                 local _eW = _Badge(startX + _aW + slashW, rightTabKey)
-                Susano.DrawText(startX + _aW + slashW + _eW + gapLbl, hTextY, "Switch Tab", hFontSize, 0.75, 0.75, 0.80, 1)
+                Lapsus_DrawText_compat(startX + _aW + slashW + _eW + gapLbl, hTextY, "Switch Tab", hFontSize, 0.75, 0.75, 0.80, 1)
             end
 
             if Menu.State.currentMenu == "ONLINE" and Menu.State.onlineTab == 1 and selectedPlayer and selectedPlayer.id then
@@ -4517,21 +4710,21 @@ function Menu.Actions.RenderMenu()
                     local relA  = ((tB-cH+180)%360)-180
                     local pBarY = hintY+hintH_px+math.floor(4*menuScale)
                     local pH    = math.floor(20*menuScale)
-                    Susano.DrawRectFilled(leftX_px,pBarY,menuW_px,pH,0,0,0,0.65,4)
+                    Lapsus.DrawRect_Filled(leftX_px,pBarY,menuW_px,pH,0,0,0,0.65,4)
                     local clA  = math.max(-90,math.min(90,relA))
                     local iX   = leftX_px+menuW_px/2+(clA/90)*(menuW_px/2-10*menuScale)
                     local iW   = math.floor(6*menuScale)
                     local ir2,ig2,ib2 = 1,1,1
                     if math.abs(relA)>90 then ir2,ig2,ib2=1,0.3,0.3 end
-                    Susano.DrawRectFilled(iX-iW*0.5,pBarY+3,iW,pH-6,ir2,ig2,ib2,1,2)
-                    Susano.DrawRectFilled(leftX_px+menuW_px/2-1,pBarY+2,2,pH-4,0.9,0.9,0.9,0.4,0)
-                    if Susano.GetTextWidth then
+                    Lapsus.DrawRect_Filled(iX-iW*0.5,pBarY+3,iW,pH-6,ir2,ig2,ib2,1,2)
+                    Lapsus.DrawRect_Filled(leftX_px+menuW_px/2-1,pBarY+2,2,pH-4,0.9,0.9,0.9,0.4,0)
+                    if Lapsus_GetTextWidth_compat then
                         local pF=math.floor(14*menuScale)
                         local pY=pBarY+(pH-pF)*0.5
-                        Susano.DrawText(leftX_px+6*menuScale,pY,string.format("%dm",math.floor(dist)),pF,0.8,0.8,0.8,1)
+                        Lapsus_DrawText_compat(leftX_px+6*menuScale,pY,string.format("%dm",math.floor(dist)),pF,0.8,0.8,0.8,1)
                         local aC=relA<-10 and "<" or (relA>10 and ">" or "^")
-                        local aW2=Susano.GetTextWidth(aC,pF)
-                        Susano.DrawText(leftX_px+menuW_px-aW2-6*menuScale,pY,aC,pF,ir2,ig2,ib2,1)
+                        local aW2=Lapsus_GetTextWidth_compat(aC,pF)
+                        Lapsus_DrawText_compat(leftX_px+menuW_px-aW2-6*menuScale,pY,aC,pF,ir2,ig2,ib2,1)
                     end
                 end
             end
@@ -4812,9 +5005,9 @@ CreateThread(function()
         if not isFirstLoadBinding then
             local openJustPressed = false
 
-            -- Check open/close key via Susano GetAsyncKeyState or fallback control
-            if Susano and Susano.GetAsyncKeyState then
-                local vkDown = Susano.GetAsyncKeyState(Menu.Keys.VK_OPEN)
+            -- Check open/close key via Lapsus GetAsyncKeyState or fallback control
+            if Lapsus and Lapsus_GetAsyncKeyState_compat then
+                local vkDown = Lapsus_GetAsyncKeyState_compat(Menu.Keys.VK_OPEN)
                 local blockedOpen = (
                     Menu.Keys.VK_OPEN == 0x01 or -- clic gauche
                     Menu.Keys.VK_OPEN == 0x02 or -- clic droit
@@ -4896,12 +5089,12 @@ CreateThread(function()
                 -- NE PAS utiliser IsDisabledControlJustPressed(0, 191) ici :
                 -- INPUT_FRONTEND_ACCEPT (191) se dclenche aussi sur le clic gauche
                 -- quand GTA dtecte une UI active  provoque des slections accidentelles.
-                -- On utilise UNIQUEMENT le VK Susano (vrai Entre clavier) pour la slection.
+                -- On utilise UNIQUEMENT le VK Lapsus (vrai Entre clavier) pour la slection.
 
-                -- Susano VK Enter (0x0D) : unique mthode de slection
-                if not shouldSelect and Susano and Susano.GetAsyncKeyState then
-                    local enterDown = Susano.GetAsyncKeyState(0x0D)
-                    local ctrlDown  = Susano.GetAsyncKeyState(0x7B) -- F12
+                -- Lapsus VK Enter (0x0D) : unique mthode de slection
+                if not shouldSelect and Lapsus and Lapsus_GetAsyncKeyState_compat then
+                    local enterDown = Lapsus_GetAsyncKeyState_compat(0x0D)
+                    local ctrlDown  = Lapsus_GetAsyncKeyState_compat(0x7B) -- F12
 
                     local isModalActive = _G.isBindingNoclip or (_G.GiveInputState and _G.GiveInputState.active) or _G.CustomInputActive
                     if isModalActive then
@@ -4964,9 +5157,9 @@ CreateThread(function()
                 local nextTabPressed = false
                 local prevTabPressed = false
 
-                -- Susano VK API
-                if Susano and Susano.GetAsyncKeyState then
-                    local eDown = Susano.GetAsyncKeyState(0x45) -- Key E
+                -- Lapsus VK API
+                if Lapsus and Lapsus_GetAsyncKeyState_compat then
+                    local eDown = Lapsus_GetAsyncKeyState_compat(0x45) -- Key E
                     if eDown and not _G._vkNextTabState then
                         nextTabPressed = true
                         _G._vkNextTabState = true
@@ -4976,7 +5169,7 @@ CreateThread(function()
 
                     if layoutName == "AZERTY" then
                         -- AZERTY: Prev Tab = Touche A (VK 0x41). Touche Q (0x51 / Control 44) ne decale STRICTEMENT PAS !
-                        local aDown = Susano.GetAsyncKeyState(0x41) -- Key A uniquement sur AZERTY
+                        local aDown = Lapsus_GetAsyncKeyState_compat(0x41) -- Key A uniquement sur AZERTY
                         if aDown and not _G._vkPrevTabState then
                             prevTabPressed = true
                             _G._vkPrevTabState = true
@@ -4985,7 +5178,7 @@ CreateThread(function()
                         end
                     else
                         -- QWERTY: Prev Tab = Touche Q (VK 0x51). Touche A (0x41 / Control 34) ne decale pas !
-                        local qDown = Susano.GetAsyncKeyState(0x51) -- Key Q uniquement sur QWERTY
+                        local qDown = Lapsus_GetAsyncKeyState_compat(0x51) -- Key Q uniquement sur QWERTY
                         if qDown and not _G._vkPrevTabState then
                             prevTabPressed = true
                             _G._vkPrevTabState = true
@@ -5094,7 +5287,7 @@ end)
         -- BUG FIX: Was Wait(0) unconditionally  wasted CPU every frame even when fovHijack was off.
         Wait(fovHijackActive and 0 or 200)
 
-        if IsControlJustPressed(0, 344) or (Susano and Susano.GetAsyncKeyState and Susano.GetAsyncKeyState(0x7A)) then
+        if IsControlJustPressed(0, 344) or (Lapsus and Lapsus_GetAsyncKeyState_compat and Lapsus_GetAsyncKeyState_compat(0x7A)) then
             if fovHijackActive then
                 local currentIndex = 1
                 for i, key in ipairs(keys) do
@@ -5116,7 +5309,7 @@ end)
 
 local function DrawSilentKillFOVCircle()
     if not Menu.State.silentKillFovDisplayActive then return end
-    if not Susano or not Susano.DrawLine then return end
+    if not Lapsus or not Lapsus.DrawLine then return end
 
     local screenW, screenH = 1920, 1080
     if GetActiveScreenResolution then
@@ -5155,7 +5348,7 @@ local function DrawSilentKillFOVCircle()
         local y1 = cy + math.sin(a1) * radius
         local x2 = cx + math.cos(a2) * radius
         local y2 = cy + math.sin(a2) * radius
-        Susano.DrawLine(x1, y1, x2, y2, tr, tg, tb, 0.9, 2.0)
+        Lapsus.DrawLine(x1, y1, x2, y2, tr, tg, tb, 0.9, 2.0)
     end
 end
 
@@ -5189,17 +5382,17 @@ end)
 CreateThread(function()
     while true do
         Wait(0)
-        local useSusano = (Susano and Susano.BeginFrame and Susano.SubmitFrame)
+        local useSusano = (Lapsus and Lapsus_BeginFrame_compat and Lapsus.DrawCommit)
         if useSusano then
-            Susano.BeginFrame()
-            if _G.menuFontId and Susano.PushFont then
-                Susano.PushFont(_G.menuFontId)
+            Lapsus_BeginFrame_compat()
+            if _G.menuFontId and Lapsus_PushFont_compat then
+                Lapsus_PushFont_compat(_G.menuFontId)
             end
         end
 
         -- Bloquer TOUS les controles GTA quand une UI bloquante est active
         -- Le thread dÃ©diÃ© (en haut du fichier) gÃ¨re le blocage principal.
-        -- On le rÃ©pÃ¨te ici aussi pour couvrir la mÃªme frame cÃ´tÃ© rendu Susano.
+        -- On le rÃ©pÃ¨te ici aussi pour couvrir la mÃªme frame cÃ´tÃ© rendu Lapsus_UNPORTED.
         if IsBlockingUIActive() then
             DisableAllControlActions(0)
             DisableAllControlActions(1)
@@ -5233,7 +5426,7 @@ CreateThread(function()
         -- DYNAMIC BINDING SCANNER
         if _G.isBindingNoclip and _G.bindingActionData and _G.bindingActionData.type == "DYNAMIC" then
             for vk = 0x01, 0xFE do
-                if Susano.GetAsyncKeyState(vk) and vk ~= 0x12 and vk ~= 0x11 and vk ~= 0x7B then -- Skip Alt/Ctrl/F12
+                if Lapsus_GetAsyncKeyState_compat(vk) and vk ~= 0x12 and vk ~= 0x11 and vk ~= 0x7B then -- Skip Alt/Ctrl/F12
                     if vk == 0x1B then -- ESC to cancel
                         _G.isBindingNoclip = false
                         Wait(200)
@@ -5274,7 +5467,7 @@ CreateThread(function()
                             _G._vkEnterState = true
                             _G._lastSelectionTime = GetGameTimer() + 350
                             ShowDynastyNotification("[ BIND ] Sauvegarde")
-                            while Susano and Susano.GetAsyncKeyState and Susano.GetAsyncKeyState(0x0D) do Wait(0) end
+                            while Lapsus and Lapsus_GetAsyncKeyState_compat and Lapsus_GetAsyncKeyState_compat(0x0D) do Wait(0) end
                             Wait(100)
                         end
                     else
@@ -5288,15 +5481,15 @@ CreateThread(function()
         end
 
         if useSusano then
-            if _G.menuFontId and Susano.PopFont then
-                Susano.PopFont()
+            if _G.menuFontId and Lapsus_PopFont_compat then
+                Lapsus_PopFont_compat()
             end
             if Menu.OnRender then
                 local success, err = pcall(Menu.OnRender)
                 if not success then end
             end
-            if Susano.SubmitFrame then
-                Susano.SubmitFrame()
+            if Lapsus.DrawCommit then
+                Lapsus.DrawCommit()
             end
         end
     end
