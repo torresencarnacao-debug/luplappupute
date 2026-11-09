@@ -11691,7 +11691,7 @@ function HandleInputMenu()
 
             if shootVisionActive then
                 local ped = PlayerPedId()
-                if not GetWeaponFromInventory(ped) then
+                if (_G.ShootVisionModeIdx or 1) ~= 2 and not GetWeaponFromInventory(ped) then
                     ShowDynastyNotification("[ WEAPONS ] No compatible weapon in inventory")
                 end
             end
@@ -17887,47 +17887,51 @@ end
 function Menu.Actions.ToggleEasyHandling()
     Menu.State.easyHandlingActive = not Menu.State.easyHandlingActive
     local enable = Menu.State.easyHandlingActive
+    local fields = {"fMass", "fInitialDragCoeff", "fTractionLossMult", "fLowSpeedTractionLossMult", "fSteeringLock"}
+    local originals = Menu.State._easyHandlingOriginals or {}
+    Menu.State._easyHandlingOriginals = originals
 
-    if type(Lapsus) == "table" and type(Lapsus_InjectResource_compat) == "function" then
-        Lapsus_InjectResource_compat("any", string.format([[
-            if _G.EasyHandlingEnabled == nil then _G.EasyHandlingEnabled = false end
-            _G.EasyHandlingEnabled = %s
-
-            if _G.EasyHandlingEnabled then
-                local function StartEasyHandling()
-                    CreateThread(function()
-                        while _G.EasyHandlingEnabled and not Unloaded do
-                        Wait(0)
-                        local ped = PlayerPedId()
-                        if ped and ped ~= 0 then
-                            local veh = GetVehiclePedIsIn(ped, false)
-                                if veh and veh ~= 0 and DoesEntityExist(veh) then
-                                    SetVehicleGravityAmount(veh, 73.0)
-                                    SetVehicleHandlingFloat(veh, "CHandlingData", "fMass", 500.0)
-                                    SetVehicleHandlingFloat(veh, "CHandlingData", "fInitialDragCoeff", 5.0)
-                                    SetVehicleHandlingFloat(veh, "CHandlingData", "fTractionLossMult", 0.0)
-                                    SetVehicleHandlingFloat(veh, "CHandlingData", "fLowSpeedTractionLossMult", 0.0)
-                                    SetVehicleHandlingFloat(veh, "CHandlingData", "fSteeringLock", 40.0)
-                                    ModifyVehicleTopSpeed(veh, 1.5)
-                            end
-                        end
-                    end
-                end)
-                end
-                StartEasyHandling()
-            else
+    if enable then
+        Menu.State._easyHandlingGeneration = (Menu.State._easyHandlingGeneration or 0) + 1
+        local generation = Menu.State._easyHandlingGeneration
+        CreateThread(function()
+            while Menu.State.easyHandlingActive and Menu.State._easyHandlingGeneration == generation do
                 local ped = PlayerPedId()
-                if ped and ped ~= 0 then
-                    local veh = GetVehiclePedIsIn(ped, false)
-                    if veh and veh ~= 0 and DoesEntityExist(veh) then
-                        SetVehicleGravityAmount(veh, 9.8)
-                        SetVehicleHandlingFloat(veh, "CHandlingData", "fMass", 1500.0)
-                        SetVehicleHandlingFloat(veh, "CHandlingData", "fInitialDragCoeff", 10.0)
-                        ModifyVehicleTopSpeed(veh, 1.0)
+                local veh = ped and ped ~= 0 and GetVehiclePedIsIn(ped, false) or 0
+                if veh ~= 0 and DoesEntityExist(veh) then
+                    if not originals[veh] then
+                        local saved = {handling = {}, gravity = 9.8}
+                        if type(GetVehicleGravityAmount) == "function" then
+                            saved.gravity = GetVehicleGravityAmount(veh) or 9.8
+                        end
+                        for _, field in ipairs(fields) do
+                            saved.handling[field] = GetVehicleHandlingFloat(veh, "CHandlingData", field)
+                        end
+                        originals[veh] = saved
                     end
+                    SetVehicleGravityAmount(veh, 73.0)
+                    SetVehicleHandlingFloat(veh, "CHandlingData", "fMass", 500.0)
+                    SetVehicleHandlingFloat(veh, "CHandlingData", "fInitialDragCoeff", 5.0)
+                    SetVehicleHandlingFloat(veh, "CHandlingData", "fTractionLossMult", 0.0)
+                    SetVehicleHandlingFloat(veh, "CHandlingData", "fLowSpeedTractionLossMult", 0.0)
+                    SetVehicleHandlingFloat(veh, "CHandlingData", "fSteeringLock", 40.0)
+                    ModifyVehicleTopSpeed(veh, 1.5)
                 end
+                Wait(0)
             end
-        ]], tostring(enable)))
+        end)
+    else
+        Menu.State._easyHandlingGeneration = (Menu.State._easyHandlingGeneration or 0) + 1
+        for veh, saved in pairs(originals) do
+            if DoesEntityExist(veh) then
+                SetVehicleGravityAmount(veh, saved.gravity)
+                for field, value in pairs(saved.handling) do
+                    SetVehicleHandlingFloat(veh, "CHandlingData", field, value)
+                end
+                ModifyVehicleTopSpeed(veh, 1.0)
+            end
+            originals[veh] = nil
+        end
     end
 
     if enable then
@@ -20607,8 +20611,8 @@ do
                         SetEntityCoordsNoOffset(candidate,launch.x,launch.y,launch.z,false,false,false)
                         SetEntityRotation(candidate,rotation.x,0.0,rotation.z,2,true)
                         SetEntityAngularVelocity(candidate,0.0,0.0,0.0)
-                        local scale=vehicleLaunchScale()
-                        SetEntityVelocity(candidate,direction.x*120.0*scale,direction.y*120.0*scale,direction.z*120.0*scale)
+                        local speed=150.0*math.max(vehicleLaunchScale(),0.16)
+                        SetEntityVelocity(candidate,direction.x*speed,direction.y*speed,direction.z*speed)
                     else
                         recent[candidate]=GetGameTimer()+750
                         if not _G._shootCarNearestPending then ShowDynastyNotification('[ SHOOT CAR ] Prise refusee') end
@@ -25443,6 +25447,129 @@ CreateThread(function()
         return bestPed
     end
 
+    local nativeCar = 0
+    local nativeCarOwned = false
+    local lastNativeFailure = -3000
+    local function nativeFailure(reason)
+        if GetGameTimer() - lastNativeFailure >= 3000 then
+            ShowDynastyNotification('[ SHOOT VISION ] ' .. reason)
+            print('[ SHOOT VISION NATIF ] ' .. reason)
+            lastNativeFailure = GetGameTimer()
+        end
+        return false
+    end
+    local function fireNativeFromVehicle(fireBullet, targetPed)
+        local saved = Menu.Helpers.CaptureShootCarOrigin()
+        if nativeCar == 0 or not DoesEntityExist(nativeCar) then
+            nativeCar, nativeCarOwned = 0, false
+            local nearest, distance = 0, math.huge
+            for _, candidate in ipairs(GetGamePool('CVehicle')) do
+                if Menu.Helpers.IsNetworkShootVehicle(candidate)
+                    and Menu.Helpers.CanUseEffectVehicle(candidate)
+                    and IsVehicleSeatFree(candidate, -1) then
+                    local d = #(GetEntityCoords(candidate) - saved.coords)
+                    if d < distance then nearest, distance = candidate, d end
+                end
+            end
+            if nearest ~= 0 and Menu.Helpers.RequestEffectVehicle(nearest, 500) then
+                nativeCar = nearest
+            else
+                local model = GetHashKey('sultan')
+                RequestModel(model)
+                local loading = GetGameTimer()
+                while not HasModelLoaded(model) and GetGameTimer() - loading < 2000 do Wait(0) end
+                if not HasModelLoaded(model) then return nativeFailure('Modele voiture non charge') end
+                nativeCar = CreateVehicle(model, saved.coords.x + 3.0, saved.coords.y,
+                    saved.coords.z, saved.heading, true, false)
+                SetModelAsNoLongerNeeded(model)
+                if nativeCar == 0 or not DoesEntityExist(nativeCar) then return nativeFailure('Creation voiture refusee') end
+                nativeCarOwned = true
+                if not NetworkGetEntityIsNetworked(nativeCar) then NetworkRegisterEntityAsNetworked(nativeCar) end
+                local registering = GetGameTimer()
+                while not Menu.Helpers.IsNetworkShootVehicle(nativeCar)
+                    and GetGameTimer() - registering < 750 do Wait(0) end
+                if not Menu.Helpers.IsNetworkShootVehicle(nativeCar) then
+                    DeleteEntity(nativeCar)
+                    nativeCar, nativeCarOwned = 0, false
+                    return nativeFailure('Voiture non synchronisee')
+                end
+                local netId = NetworkGetNetworkIdFromEntity(nativeCar)
+                SetNetworkIdCanMigrate(netId, true)
+                SetNetworkIdExistsOnAllMachines(netId, true)
+            end
+        end
+        local vehicle = nativeCar
+        if not Menu.Helpers.IsNetworkShootVehicle(vehicle)
+            or not Menu.Helpers.RequestEffectVehicle(vehicle, 500) then
+            if nativeCarOwned and DoesEntityExist(vehicle)
+                and GetVehiclePedIsIn(saved.ped, false) ~= vehicle then DeleteEntity(vehicle) end
+            nativeCar, nativeCarOwned = 0, false
+            return nativeFailure('Controle voiture refuse')
+        end
+        local carCoords = GetEntityCoords(vehicle)
+        local carHeading = GetEntityHeading(vehicle)
+        local carVelocity = GetEntityVelocity(vehicle)
+        local fired = false
+        local ok, err = pcall(function()
+            local pos = saved.coords
+            FreezeEntityPosition(saved.ped, false)
+            if saved.vehicle ~= 0 then
+                TaskLeaveVehicle(saved.ped, saved.vehicle, 16)
+                local leaving = GetGameTimer()
+                while GetVehiclePedIsIn(saved.ped, false) == saved.vehicle
+                    and GetGameTimer() - leaving < 300 do Wait(0) end
+                if GetVehiclePedIsIn(saved.ped, false) == saved.vehicle then return end
+            end
+            RequestCollisionAtCoord(pos.x, pos.y, pos.z)
+            SetEntityCoordsNoOffset(vehicle, pos.x + 3.0, pos.y, pos.z + 1.0, false, false, false)
+            FreezeEntityPosition(vehicle, true)
+            local carPos = GetEntityCoords(vehicle)
+            SetEntityCoordsNoOffset(saved.ped, carPos.x, carPos.y, carPos.z + 0.5, false, false, false)
+            ClearPedTasksImmediately(saved.ped)
+            TaskWarpPedIntoVehicle(saved.ped, vehicle, -1)
+            local started = GetGameTimer()
+            repeat
+                if GetPedInVehicleSeat(vehicle, -1) == saved.ped then break end
+                SetPedIntoVehicle(saved.ped, vehicle, -1)
+                Wait(0)
+            until GetGameTimer() - started >= 250
+            if GetPedInVehicleSeat(vehicle, -1) ~= saved.ped then return end
+            Wait(60)
+            if GetPedInVehicleSeat(vehicle, -1) ~= saved.ped then return end
+            local targetHealth = targetPed and DoesEntityExist(targetPed) and GetEntityHealth(targetPed) or nil
+            local targetArmour = targetHealth and GetPedArmour(targetPed) or nil
+            fireBullet()
+            fired = true
+            -- Rester dans le vehicule jusqu'au constat des degats, avec une limite
+            -- si la cible est invulnerable ou si sa sante n'est pas synchronisee.
+            local firedAt = GetGameTimer()
+            local maxWait = targetHealth and 800 or 250
+            repeat
+                Wait(0)
+                if targetHealth and DoesEntityExist(targetPed)
+                    and (GetEntityHealth(targetPed) < targetHealth
+                        or GetPedArmour(targetPed) < targetArmour
+                        or IsEntityDead(targetPed)) then break end
+            until GetGameTimer() - firedAt >= maxWait
+        end)
+        local restoreOk, returned = pcall(Menu.Helpers.RestoreShootCarOrigin, saved)
+        if DoesEntityExist(vehicle) then
+            if NetworkHasControlOfEntity(vehicle) then
+                SetEntityCoordsNoOffset(vehicle, carCoords.x, carCoords.y, carCoords.z, false, false, false)
+                SetEntityHeading(vehicle, carHeading)
+                SetEntityVelocity(vehicle, carVelocity.x, carVelocity.y, carVelocity.z)
+            end
+            FreezeEntityPosition(vehicle, false)
+        end
+        if not ok then
+            print('[ SHOOT VISION NATIF ] ' .. tostring(err))
+            return nativeFailure('Erreur tir natif : voir F8')
+        end
+        if not fired then return nativeFailure('Siege conducteur non confirme') end
+        if not restoreOk or not returned then return nativeFailure('Retour non confirme') end
+        return true
+    end
+
     while true do
         -- BUG FIX: shootVisionActive et freecam_active peuvent être nil (local scope) → coerce to bool
         local _sva = shootVisionActive == true or Menu.State.shootVisionActive == true
@@ -25452,15 +25579,24 @@ CreateThread(function()
         -- BUG FIX: Return to global variable scope for freecam
         _sva = shootVisionActive == true or Menu.State.shootVisionActive == true
         _fca = freecam_active == true or (_G.freecam_active == true)
+        if (not _sva or not _fca or (_G.ShootVisionModeIdx or 1) ~= 2)
+            and nativeCar ~= 0 then
+            if not DoesEntityExist(nativeCar) then nativeCar, nativeCarOwned = 0, false
+            elseif GetVehiclePedIsIn(PlayerPedId(), false) ~= nativeCar then
+                if nativeCarOwned then DeleteEntity(nativeCar) end
+                nativeCar, nativeCarOwned = 0, false
+            end
+        end
         if _sva and _fca then
             -- Tir dclench par clic gauche maintenu (Lapsus VK 0x01)
             local clickHeld = (Lapsus and Lapsus_GetAsyncKeyState_compat and Lapsus_GetAsyncKeyState_compat(0x01)) or false
 
             if clickHeld then
                 local playerPed = PlayerPedId()
+                local svMode = _G.ShootVisionModeIdx or 1
                 local weaponHash = GetWeaponFromInventory(playerPed)
 
-                if weaponHash then
+                if weaponHash or svMode == 2 then
                     -- Variables globales de la freecam
                     local camCoords = cam_pos
                     local direction  = RotDir(cam_rot)
@@ -25468,9 +25604,17 @@ CreateThread(function()
                     local targetPed  = getBestFreecamTarget(camCoords)
 
                     -- Mode : 1 = Normal (arme inventaire), 2 = Natif (REVOLTER_MG)
-                    local svMode = _G.ShootVisionModeIdx or 1
                     local nativeHash = GetHashKey("VEHICLE_WEAPON_REVOLTER_MG")
                     local fireHash = (svMode == 2) and nativeHash or weaponHash
+
+                    local function fireBullet(x1, y1, z1, x2, y2, z2)
+                        local fire = function()
+                            ShootSingleBulletBetweenCoords(x1, y1, z1, x2, y2, z2,
+                                50, true, fireHash, PlayerPedId(), true, false, 1000.0)
+                        end
+                        if svMode == 2 then fireNativeFromVehicle(fire, targetPed)
+                        else pcall(fire) end
+                    end
 
                     if targetPed then
                         local boneIndex = GetPedBoneIndex(targetPed, 24818) -- Spine3
@@ -25478,26 +25622,16 @@ CreateThread(function()
                             local targetCoords = GetWorldPositionOfEntityBone(targetPed, boneIndex)
                             if targetCoords then
                                 local mSpawnPoint = targetCoords + vector3(0.0, 0.0, 2.0)
-                                pcall(function()
-                                    ShootSingleBulletBetweenCoords(
-                                        mSpawnPoint.x, mSpawnPoint.y, mSpawnPoint.z,
-                                        targetCoords.x, targetCoords.y, targetCoords.z,
-                                        50, true, fireHash, playerPed, true, false, 1000.0
-                                    )
-                                end)
+                                fireBullet(mSpawnPoint.x, mSpawnPoint.y, mSpawnPoint.z,
+                                    targetCoords.x, targetCoords.y, targetCoords.z)
                             end
                         end
                     else
                         -- Tir sur le decor si aucune cible
                         local spawnPoint = camCoords + (direction * 1.0)
                         local endCoords  = camCoords + (direction * 1000.0)
-                        pcall(function()
-                            ShootSingleBulletBetweenCoords(
-                                spawnPoint.x, spawnPoint.y, spawnPoint.z,
-                                endCoords.x, endCoords.y, endCoords.z,
-                                50, true, fireHash, playerPed, true, false, 1000.0
-                            )
-                        end)
+                        fireBullet(spawnPoint.x, spawnPoint.y, spawnPoint.z,
+                            endCoords.x, endCoords.y, endCoords.z)
                     end
                 end
 
