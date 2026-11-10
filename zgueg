@@ -1,1 +1,1 @@
-af
+print("Version Lua : " .. _VERSION)
