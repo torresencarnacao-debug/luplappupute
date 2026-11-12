@@ -55,6 +55,142 @@ local function stopLegacyShiftVehicleControl()
 end
 -- Prevent repeated execution in the same Lua environment from stacking threads.
 if _G._mirageMenuRunning then
+    -- BEGIN MIRAGE ACTIVE INSTANCE HOTFIX
+    do
+        -- Execute once in the same Lapsus Lua environment as the running Mirage menu.
+        local menu = rawget(_G, 'Menu')
+        if type(menu) ~= 'table' or type(menu.State) ~= 'table'
+            or type(menu.Helpers) ~= 'table' or type(menu.Actions) ~= 'table' then
+            print('[Mirage hotfix] Menu actif introuvable. Charge lapsus_fixed.lua d abord.')
+            return
+        end
+        if _G._mirageTpWeaponHotfix then
+            print('[Mirage hotfix] Deja actif; Movement a ' .. #menu.Helpers.GetMovementOptions() .. ' lignes.')
+            return
+        end
+
+        local oldMovement = menu.Helpers.GetMovementOptions
+        menu.Helpers.GetMovementOptions = function(...)
+            local rows = oldMovement(...)
+            if type(rows) == 'table' then
+                local existingIndex = nil
+                for position, row in ipairs(rows) do
+                    if type(row) == 'table' and row.id == 'tp_way' then existingIndex = position; break end
+                end
+                if existingIndex and existingIndex ~= 4 then
+                    table.insert(rows, 4, table.remove(rows, existingIndex))
+                elseif not existingIndex then
+                    table.insert(rows, 4, {type='action', name='TP Way', id='tp_way'})
+                end
+            end
+            return rows
+        end
+
+        menu.Actions.TpWay = function()
+            local blip = GetFirstBlipInfoId(8)
+            if not blip or blip == 0 or not DoesBlipExist(blip) then
+                print('[Mirage hotfix] Place un waypoint.')
+                return false
+            end
+            local target = GetBlipInfoIdCoord(blip)
+            local ped = PlayerPedId()
+            local vehicle = GetVehiclePedIsIn(ped, false)
+            local entity = vehicle ~= 0 and GetPedInVehicleSeat(vehicle, -1) == ped and vehicle or ped
+            local found, ground = false, nil
+            for z = 1000.0, 0.0, -50.0 do
+                RequestCollisionAtCoord(target.x, target.y, z)
+                local ok, height = GetGroundZFor_3dCoord(target.x, target.y, z, false)
+                if ok then found, ground = true, height; break end
+                Wait(0)
+            end
+            if not found then
+                print('[Mirage hotfix] Sol non charge; TP annule.')
+                return false
+            end
+            SetEntityCoordsNoOffset(entity, target.x, target.y, ground + 1.0, false, false, false)
+            print('[Mirage hotfix] TP Way effectue.')
+            return true
+        end
+
+        local oldExecute = rawget(_G, 'ExecuteMenuAction')
+        if type(oldExecute) == 'function' then
+            _G.ExecuteMenuAction = function(section, index, ...)
+                if section == 'MOVEMENT' then
+                    local rows = menu.Helpers.GetMovementOptions()
+                    local row = rows[index]
+                    if type(row) == 'table' and row.id == 'tp_way' then
+                        return menu.Actions.TpWay()
+                    end
+                end
+                return oldExecute(section, section == 'MOVEMENT' and index > 4 and index - 1 or index, ...)
+            end
+            menu.Actions.ExecuteMenuAction = _G.ExecuteMenuAction
+        end
+
+        local spreadCache, recoilCache = {}, {}
+        local lastWeapon, lastPitch, recoilFrames = nil, nil, 0
+        local unarmed = GetHashKey('WEAPON_UNARMED')
+        local function restore(cache, setter, current, enabled)
+            for hash, value in pairs(cache) do
+                if not enabled or hash ~= current then
+                    if type(setter) == 'function' then pcall(setter, hash, value) end
+                    cache[hash] = nil
+                end
+            end
+        end
+        CreateThread(function()
+            while _G._mirageTpWeaponHotfix do
+                local spread = menu.State.noSpreadActive == true
+                local recoil = menu.State.noRecoilActive == true
+                Wait((spread or recoil) and 0 or 200)
+                spread = menu.State.noSpreadActive == true
+                recoil = menu.State.noRecoilActive == true
+                local ped = PlayerPedId()
+                local hash = DoesEntityExist(ped) and GetSelectedPedWeapon(ped) or nil
+                if hash == 0 or hash == unarmed then hash = nil end
+                restore(spreadCache, SetWeaponAccuracySpread, hash, spread)
+                restore(recoilCache, SetWeaponRecoilShakeAmplitude, hash, recoil)
+                if hash ~= lastWeapon then lastWeapon, lastPitch, recoilFrames = hash, nil, 0 end
+                if hash and spread and type(SetWeaponAccuracySpread) == 'function' then
+                    if spreadCache[hash] == nil and type(GetWeaponAccuracySpread) == 'function' then
+                        local ok, value = pcall(GetWeaponAccuracySpread, hash)
+                        if ok and type(value) == 'number' then spreadCache[hash] = value end
+                    end
+                    pcall(SetWeaponAccuracySpread, hash, 0.0)
+                end
+                if hash and recoil then
+                    if type(SetWeaponRecoilShakeAmplitude) == 'function' then
+                        if recoilCache[hash] == nil and type(GetWeaponRecoilShakeAmplitude) == 'function' then
+                            local ok, value = pcall(GetWeaponRecoilShakeAmplitude, hash)
+                            if ok and type(value) == 'number' then recoilCache[hash] = value end
+                        end
+                        pcall(SetWeaponRecoilShakeAmplitude, hash, 0.0)
+                    end
+                    if type(GetGameplayCamRelativePitch) == 'function' and type(SetGameplayCamRelativePitch) == 'function' then
+                        local aiming = IsPlayerFreeAiming(PlayerId()) or IsControlPressed(0, 24)
+                        if aiming and IsPedShooting(ped) then recoilFrames = 2 end
+                        if aiming and recoilFrames > 0 and lastPitch then
+                            pcall(SetGameplayCamRelativePitch, lastPitch, 1.0)
+                            recoilFrames = recoilFrames - 1
+                        elseif not aiming then
+                            recoilFrames = 0
+                        end
+                        if recoilFrames == 0 then lastPitch = GetGameplayCamRelativePitch() end
+                    end
+                else
+                    lastPitch, recoilFrames = nil, 0
+                end
+            end
+            restore(spreadCache, SetWeaponAccuracySpread, nil, false)
+            restore(recoilCache, SetWeaponRecoilShakeAmplitude, nil, false)
+        end)
+
+        _G._mirageTpWeaponHotfix = true
+        print(('[Mirage hotfix] Actif; Movement=%d; spread=%s; recoil=%s; camera=%s')
+            :format(#menu.Helpers.GetMovementOptions(), type(SetWeaponAccuracySpread),
+                type(SetWeaponRecoilShakeAmplitude), type(SetGameplayCamRelativePitch)))
+    end
+-- END MIRAGE ACTIVE INSTANCE HOTFIX
     if Menu and Menu.Actions then
         if Menu.State and Menu.State.shiftBoostActive and Menu.Actions.ToggleShiftBoost then
             pcall(Menu.Actions.ToggleShiftBoost,false)
@@ -639,6 +775,7 @@ function Lapsus_Unload_compat()
     if Menu and Menu.Actions and Menu.Actions.CleanupPunchAll then pcall(Menu.Actions.CleanupPunchAll) end
     if Menu and Menu.Actions and Menu.Actions.StopForcedCrosse then pcall(Menu.Actions.StopForcedCrosse) end
     if Menu and Menu.State and Menu.State.putinDeathscreenSuppressed and Menu.Actions.SetPutinDeathscreenSuppressed then pcall(Menu.Actions.SetPutinDeathscreenSuppressed,false,Menu.State.putinResourceName or "Putin") end
+    if Menu and Menu.Actions and Menu.Actions.RestoreWeaponModifiers then pcall(Menu.Actions.RestoreWeaponModifiers) end
     if Menu and Menu.Actions and Menu.Actions.StopGravityTarget then pcall(Menu.Actions.StopGravityTarget) end
     if Menu and Menu.Actions and Menu.Actions.ToggleGravitateVehicle then pcall(Menu.Actions.ToggleGravitateVehicle,false) end
     if Menu and Menu.Actions and Menu.Actions.ToggleShiftBoost then pcall(Menu.Actions.ToggleShiftBoost,false) end
@@ -2081,8 +2218,8 @@ local function GetBindToggleState(menu, index)
     elseif menu == "MOVEMENT" then
         if index == 1 then return true, S.noclipActive
         elseif index == 3 then return true, S.slideActive
-        elseif index == 5 then return true, (_G.freecam_active or false)
-        elseif index == 7 then return true, (S.freecamInfoVisible ~= false)
+        elseif index == 6 then return true, (_G.freecam_active or false)
+        elseif index == 8 then return true, (S.freecamInfoVisible ~= false)
         end
     elseif menu == "MAIN" then
         return false,false
@@ -2510,7 +2647,7 @@ function DrawFreecamHint()
             local mIdx = _G.FreecamLaunchModeIdx or 1
             text = "Launch [" .. (modes[mIdx] or "V1") .. "]"
         elseif text == "Attach" then
-            local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo", "Corp Offshelfdark", "Res Tt Sofa", "Corp Lidesk01", "Corp Maindesk", "Corp Maindeskfd", "Corp Officedesk", "Corp Officedesk 5", "Corp Officedesk004", "Corp Officedesk2", "Generator 02A", "Corp Divide", "Pot Plant 02C", "Rock 3 E", "Log Ab", "Corp Officedesk003", "Corp Officedesk1", "Windowbox B", "Apa V Ilev Fh Bedrmdoor", "Apa V Ilev Fh Heistdoor1", "Bleachers 01", "Res Fh Coftbldisp", "Corp Deskseta", "Corp Desksetb", "Gascage01", "Old Farm 02", "Studio Light 02", "Garden Edging 02", "Phonebox 04", "Ret Hd Hooks", "Wall Light 15A", "Corp Servercln", "Corp Servers1", "Corp Servers2", "Armenian Gate", "Bench 11", "Cork Board", "Muster Wboard 01", "Muster Wboard 02", "W Board Blank", "W Board Blank 2", "Premier Fence 02", "Str Sideboardm 02", "B Board Blank", "Surf Board 04", "Surf Board Ldn 04", "Table Para Comb 05", "Ret 247 Win1", "Bench 09", "Corp Partitionfd", "Ret Gs Glass02", "Parasol 04D", "Parasol 04B", "Table Para Comb 02", "Str Sideboardm 03", "Parasol 04C", "Gr Prop Bunker Bed 01", "Lit Floorlamp 05", "Lit Floorlampnight 05", "Res Tre Bed2", "Parasol 04", "Res Tt Bed", "Potatodigger", "Corp Cubiclefd", "Res Lestersbed", "Res Msonbed", "Res Msonbed S", "Log Aa", "Corp Post Open", "Corp Postbox", "Corp Postboxa", "Rock 1 F", "Bikerack 2", "Res M Sinkunit", "Kino Light 02", "Kayak 01", "Kayak 01B", "Res Tre Bed1", "Res Tre Bed1 Messy", "Cup Saucer 01", "Surf Board 01", "Surf Board Ldn 01", "Table Tennis", "Bandsaw 01", "Bush Dead 02", "Res Tre Sofa Mess A", "Tre Sofa Mess A S", "Bed Double 08", "Rock 3 B", "Worklight 04B", "Bush Med 05", "Res M H Sofa Sml", "Shelves 01", "Shelves 02", "Bench 05", "Shelves 03", "Bench 07", "Res D Bed", "Fishing Rod 01", "Fishing Rod 02", "Log Ac", "Ret Fh Doorfrmwide", "Pot Plant 04C", "Ret Fh Shelf 01", "Ret Fh Shelf 02", "Ret Fh Shelf 03", "Ret Fh Shelf 04", "Pot Plant 02D", "Xmas Tree Int", "Bed Double 09", "Res Picture Frame", "Creosote B 01", "Bed Wide 05", "Ret Tat2stuff 06", "Rock 2 G", "Garden Edging 01", "Couch Lg 07", "Bush Med 07", "Str Shelffloorm 02", "Pot Plant 01C", "Ret Tat2stuff 07", "Bush Ivy 01 1M", "Bush Ivy 02 1M", "Couch 03", "Parasol 01 Down", "Bench 06", "Rock 1 D", "Ret Ml Win4", "Ss1 Mpint Door L", "Ss1 Mpint Door R", "Hunterhide", "Ret Ml Win5", "Couch 04", "Couch Lg 08", "Acc Rugwools 01", "Acc Rugwools 03", "Fernba", "Table Para Comb 01", "Str Avunits 01", "Bench 10", "Beach Dip Bars 01", "Beach Dip Bars 02", "Strip Pole 01", "Glass Panel 07", "Beach Punchbag", "Acc Plant Tall 01", "Log Ae", "Couch Lg 06", "Res Fh Sidebrddine", "Worklight 03A", "Corp Servrtwrfd", "Corp Srvrrackfd", "Corp Srvrtwrsfd", "Poolskimmer", "Cont Chiller 01", "Pot Plant 03A", "Pot Plant Inter 03A", "Worklight 03B", "Burgerstand 01", "Pooltable 02", "Pooltable 3B", "Bush Med 06", "Str Avunits 04", "Ret Tat2stuff 05", "Bush Med 03", "Bush Med 03 Cr", "Bush Med 03 Cr2", "Bush Ivy 01 L", "Bush Ivy 02 L", "Gazebo 01", "Bush Ivy 01 R", "Bush Ivy 02 R", "Res Fh Benchlong", "Pot Plant 03C", "Str Sideboardl 11", "Bench 08", "Ret Fh Dinetable", "Res Mplanttongue", "Movie Rack", "Res Cabinet", "Str Sideboardl 06", "Res M H Sofa", "Homeles Shelter 02", "Str Sideboardl 09", "Gazebo 02", "Res R Sofa", "Generator 04", "Streetlight 12A", "Homeles Shelter 01", "Str Sideboardl 13", "Am Box Wood 01", "Wait Bench 01", "Glass Panel 06", "Aerial 01B", "Table Para Comb 03", "Res Fh Sidebrdlng", "Res Fh Sidebrdlngb", "Bush Ornament 03", "Corp Bk Flag", "Wall Light 11", "Glass Panel 03", "Spray Jackleg", "Parasol 03", "Mov Sechutwin", "Parasol 03 B", "Corp Go Glass2", "Str Sideboardl 14", "Owl Totem 01", "Parasol 03 C", "Oldplough1", "Din Table 04", "Rock 4 Big", "Bush Ornament 02", "Ret Ml Methsweets", "Beer Neon 01", "Bush Ivy 01 Bk", "Aerial 01A", "Studio Light 03", "Hotdogstand 01", "Log Ad", "Bush Ivy 01 2M", "Bush Ivy 02 2M", "Rock 2 C", "Rock 2 D", "Bush Ornament 04", "Rock 4 Big2", "Chickencoop A", "Str Shelffreel 01", "Beach Lg Surf", "Ret Tatstuff01", "Cora Clam 01", "Streetlight 12B", "Table Para Comb 04", "Bush Ornament 01", "Rock 3 I", "Food Van 01", "Mov Sechutwin 02", "Corp Fib Glass Thin", "Corp Fib Glass1", "Bush Ivy 01 Pot", "Bush Ivy 02 Pot", "Glass Panel 05", "Lts Offroad Tyres01", "Juicestand", "Res Wall Cornertop", "Corp Conftable2", "Corp Conftable3", "Din Table 06", "Parasol 01 C", "Flag France", "Flag Ireland", "Din Table 01", "Res Fh Diningtable", "Offroad Bale02", "Offroad Bale03", "Ven Shop 1 Counter", "Parasol 01 B", "Parasol 01", "Din Table 05", "Din Table 11", "Generator 03A", "Chip Fryer", "Food Van 02", "Ret Gassweetcount", "Grain Hopper", "Offroad Tyres01", "Bleachers 03", "Parking Hut 2", "Parking Hut 2B", "Streetlight 11A", "Road Memorial 02", "Res Msoncabinet", "Busstop 05", "Plough", "Res Wall", "Offroad Tyres01 Tu", "Rock 3 H", "Bed With Table 02", "Rock 1 C", "Bleachers 04", "Bleachers 04 Cr", "Pier Kiosk 01", "Pier Kiosk 02", "Pier Kiosk 03", "Basketball Net", "Ret Gc Bootdisp", "Pot Plant 01B", "Pot Plant 03B", "Pot Plant 03B Cr2", "Gazebo 03", "Streetlight 07A", "Streetlight 07B", "Sprayer", "Log 01", "Str Avunitm 01", "Str Avunitm 03", "Front Seat Row 01", "Res Son Desk", "Streetlight 08", "Log Af", "Streetlight 15A", "Hotel Clock 01", "Res M Bananaplant", "Rock 1 A", "Warehseshelf03", "Beach Bars 01", "Pile Dirt 06", "Acc Rugwoolm 01", "Acc Rugwoolm 02", "Acc Rugwoolm 03", "Acc Rugwoolm 04", "Oldlight 01A", "Corp Bk Balustrade", "Generator 03B", "Stn Sofacorn 01", "Rock 1 B", "Bed Table Wide 12", "Stn Sofacorn 08", "Stn Sofacorn 09", "Stn Sofacorn 07", "Stn Sofacorn 06", "Pile Dirt 02", "Parasol 02 B", "Parasol 02 C", "Parasol 02", "Stn Sofacorn 05", "Can Canoe", "Stn Sofacorn 10", "Res M Palmstairs", "Set Generator 01", "Set Generator 01 Cr", "P Spider 01C", "Parasol 05", "Streetlight 09", "Side Spreader", "Bleachers 05", "Bleachers 05 Cr", "Busstop 02", "Bleachers 02", "Ind Light 04", "Res Fh Sofa", "Res Mp Sofa" }
+            local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo" }
             local mIdx = _G.FreecamAttachModeIdx or 1
             text = "Attach [" .. (modes[mIdx] or "Full Box") .. "]"
         elseif text == "Spawn Props Model" then
@@ -4939,13 +5076,58 @@ function Menu.Helpers.GetMovementOptions()
         { type = "selector", name = "Noclip Pose", id = "noclip_pose_sel",
           options = _poseNamesMove, valueIdx = poseIdx }, -- index 2
         "Slide",          -- index 3
-        { type = "separator", name = "Freecam" }, -- index 4
-        { type = "toggle_slider_freecam", name = "Freecam" }, -- index 5 : toggle + speed slider
-        "Layout", -- index 6
-        "Freecam Info",   -- index 7
+        {type="action", name="TP Way", id="tp_way"}, -- index 4
+        { type = "separator", name = "Freecam" }, -- index 5
+        { type = "toggle_slider_freecam", name = "Freecam" }, -- index 6 : toggle + speed slider
+        "Layout", -- index 7
+        "Freecam Info",   -- index 8
     }
 end
 
+function Menu.Actions.TpWay()
+    local waypoint=GetFirstBlipInfoId(8)
+    if not waypoint or waypoint==0 or not DoesBlipExist(waypoint) then
+        ShowDynastyNotification("[ TP WAY ] Place un waypoint")
+        return false
+    end
+    local ped=PlayerPedId()
+    if not ped or ped==0 or not DoesEntityExist(ped) then return false end
+    local point=GetBlipInfoIdCoord(waypoint)
+    local vehicle=GetVehiclePedIsIn(ped,false)
+    local entity=(vehicle~=0 and GetPedInVehicleSeat(vehicle,-1)==ped) and vehicle or ped
+    local focused=false
+    local ok,reason=pcall(function()
+        if type(SetFocusPosAndVel)=='function' then
+            SetFocusPosAndVel(point.x,point.y,point.z,0.0,0.0,0.0)
+            focused=true
+        end
+        local ground=nil
+        local started=GetGameTimer()
+        repeat
+            RequestCollisionAtCoord(point.x,point.y,point.z)
+            for _,height in ipairs({1000.0,500.0,100.0}) do
+                local found,z=GetGroundZFor_3dCoord(point.x,point.y,height,false)
+                if found then ground=z;break end
+            end
+            if ground then break end
+            Wait(50)
+        until GetGameTimer()-started>=4000
+        if not ground then error("Sol introuvable au waypoint") end
+        local z=ground+(entity==vehicle and 1.5 or 1.0)
+        RequestCollisionAtCoord(point.x,point.y,z)
+        SetEntityCoordsNoOffset(entity,point.x,point.y,z,false,false,true)
+        SetEntityVelocity(entity,0.0,0.0,0.0)
+        if entity==vehicle then SetVehicleOnGroundProperly(vehicle) end
+        Wait(100)
+    end)
+    if focused and type(ClearFocus)=='function' then pcall(ClearFocus) end
+    if not ok then
+        ShowDynastyNotification("[ TP WAY ] "..tostring(reason))
+        return false
+    end
+    ShowDynastyNotification("[ TP WAY ] Arrive")
+    return true
+end
 Menu.State.antiTpActive = false
 Menu.State.antiLaunchActive = false
 Menu.State.antiHeadshotActive = false
@@ -6332,7 +6514,7 @@ function Menu.Actions.RunAnticheatChecker(isAutoRun)
         -- Les trois events Putin suivent exclusivement la presence de Putin.
         local hasPutin = resSet["putin"] == true
         if type(Lapsus_BlockServerEvent_compat) == "function" then
-            for _, eventName in ipairs({"WTwXVzijHxXZ0iLqkSpRP:1794433754p7hXI5jS5oAnvw51PrA","3HWghg90P6McRFOiuNUXI:1794379259s8yToYvQQIEKQRaSSV5","1Er8vaHantDQ6n6bmbjSV:1794306639QMXgA3Y5aSxbixy6l9r"}) do
+            for _, eventName in ipairs({"3HWghg90P6McRFOiuNUXI:1794379259s8yToYvQQIEKQRaSSV5","gamemode:SyncMyPlayer","WTwXVzijHxXZ0iLqkSpRP:1794433754p7hXI5jS5oAnvw51PrA"}) do
                 pcall(Lapsus_BlockServerEvent_compat, hasPutin, eventName)
             end
         end
@@ -11047,7 +11229,7 @@ _G.FreecamBugVehicleModes = { "V1", "V2" }
 _G.FreecamBugVehicleModeIdx = 1
 _G.FreecamNPCHijackModes = { "V1", "V2" }
 _G.FreecamNPCHijackModeIdx = 1
-_G.FreecamAttachModes = { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo", "Corp Offshelfdark", "Res Tt Sofa", "Corp Lidesk01", "Corp Maindesk", "Corp Maindeskfd", "Corp Officedesk", "Corp Officedesk 5", "Corp Officedesk004", "Corp Officedesk2", "Generator 02A", "Corp Divide", "Pot Plant 02C", "Rock 3 E", "Log Ab", "Corp Officedesk003", "Corp Officedesk1", "Windowbox B", "Apa V Ilev Fh Bedrmdoor", "Apa V Ilev Fh Heistdoor1", "Bleachers 01", "Res Fh Coftbldisp", "Corp Deskseta", "Corp Desksetb", "Gascage01", "Old Farm 02", "Studio Light 02", "Garden Edging 02", "Phonebox 04", "Ret Hd Hooks", "Wall Light 15A", "Corp Servercln", "Corp Servers1", "Corp Servers2", "Armenian Gate", "Bench 11", "Cork Board", "Muster Wboard 01", "Muster Wboard 02", "W Board Blank", "W Board Blank 2", "Premier Fence 02", "Str Sideboardm 02", "B Board Blank", "Surf Board 04", "Surf Board Ldn 04", "Table Para Comb 05", "Ret 247 Win1", "Bench 09", "Corp Partitionfd", "Ret Gs Glass02", "Parasol 04D", "Parasol 04B", "Table Para Comb 02", "Str Sideboardm 03", "Parasol 04C", "Gr Prop Bunker Bed 01", "Lit Floorlamp 05", "Lit Floorlampnight 05", "Res Tre Bed2", "Parasol 04", "Res Tt Bed", "Potatodigger", "Corp Cubiclefd", "Res Lestersbed", "Res Msonbed", "Res Msonbed S", "Log Aa", "Corp Post Open", "Corp Postbox", "Corp Postboxa", "Rock 1 F", "Bikerack 2", "Res M Sinkunit", "Kino Light 02", "Kayak 01", "Kayak 01B", "Res Tre Bed1", "Res Tre Bed1 Messy", "Cup Saucer 01", "Surf Board 01", "Surf Board Ldn 01", "Table Tennis", "Bandsaw 01", "Bush Dead 02", "Res Tre Sofa Mess A", "Tre Sofa Mess A S", "Bed Double 08", "Rock 3 B", "Worklight 04B", "Bush Med 05", "Res M H Sofa Sml", "Shelves 01", "Shelves 02", "Bench 05", "Shelves 03", "Bench 07", "Res D Bed", "Fishing Rod 01", "Fishing Rod 02", "Log Ac", "Ret Fh Doorfrmwide", "Pot Plant 04C", "Ret Fh Shelf 01", "Ret Fh Shelf 02", "Ret Fh Shelf 03", "Ret Fh Shelf 04", "Pot Plant 02D", "Xmas Tree Int", "Bed Double 09", "Res Picture Frame", "Creosote B 01", "Bed Wide 05", "Ret Tat2stuff 06", "Rock 2 G", "Garden Edging 01", "Couch Lg 07", "Bush Med 07", "Str Shelffloorm 02", "Pot Plant 01C", "Ret Tat2stuff 07", "Bush Ivy 01 1M", "Bush Ivy 02 1M", "Couch 03", "Parasol 01 Down", "Bench 06", "Rock 1 D", "Ret Ml Win4", "Ss1 Mpint Door L", "Ss1 Mpint Door R", "Hunterhide", "Ret Ml Win5", "Couch 04", "Couch Lg 08", "Acc Rugwools 01", "Acc Rugwools 03", "Fernba", "Table Para Comb 01", "Str Avunits 01", "Bench 10", "Beach Dip Bars 01", "Beach Dip Bars 02", "Strip Pole 01", "Glass Panel 07", "Beach Punchbag", "Acc Plant Tall 01", "Log Ae", "Couch Lg 06", "Res Fh Sidebrddine", "Worklight 03A", "Corp Servrtwrfd", "Corp Srvrrackfd", "Corp Srvrtwrsfd", "Poolskimmer", "Cont Chiller 01", "Pot Plant 03A", "Pot Plant Inter 03A", "Worklight 03B", "Burgerstand 01", "Pooltable 02", "Pooltable 3B", "Bush Med 06", "Str Avunits 04", "Ret Tat2stuff 05", "Bush Med 03", "Bush Med 03 Cr", "Bush Med 03 Cr2", "Bush Ivy 01 L", "Bush Ivy 02 L", "Gazebo 01", "Bush Ivy 01 R", "Bush Ivy 02 R", "Res Fh Benchlong", "Pot Plant 03C", "Str Sideboardl 11", "Bench 08", "Ret Fh Dinetable", "Res Mplanttongue", "Movie Rack", "Res Cabinet", "Str Sideboardl 06", "Res M H Sofa", "Homeles Shelter 02", "Str Sideboardl 09", "Gazebo 02", "Res R Sofa", "Generator 04", "Streetlight 12A", "Homeles Shelter 01", "Str Sideboardl 13", "Am Box Wood 01", "Wait Bench 01", "Glass Panel 06", "Aerial 01B", "Table Para Comb 03", "Res Fh Sidebrdlng", "Res Fh Sidebrdlngb", "Bush Ornament 03", "Corp Bk Flag", "Wall Light 11", "Glass Panel 03", "Spray Jackleg", "Parasol 03", "Mov Sechutwin", "Parasol 03 B", "Corp Go Glass2", "Str Sideboardl 14", "Owl Totem 01", "Parasol 03 C", "Oldplough1", "Din Table 04", "Rock 4 Big", "Bush Ornament 02", "Ret Ml Methsweets", "Beer Neon 01", "Bush Ivy 01 Bk", "Aerial 01A", "Studio Light 03", "Hotdogstand 01", "Log Ad", "Bush Ivy 01 2M", "Bush Ivy 02 2M", "Rock 2 C", "Rock 2 D", "Bush Ornament 04", "Rock 4 Big2", "Chickencoop A", "Str Shelffreel 01", "Beach Lg Surf", "Ret Tatstuff01", "Cora Clam 01", "Streetlight 12B", "Table Para Comb 04", "Bush Ornament 01", "Rock 3 I", "Food Van 01", "Mov Sechutwin 02", "Corp Fib Glass Thin", "Corp Fib Glass1", "Bush Ivy 01 Pot", "Bush Ivy 02 Pot", "Glass Panel 05", "Lts Offroad Tyres01", "Juicestand", "Res Wall Cornertop", "Corp Conftable2", "Corp Conftable3", "Din Table 06", "Parasol 01 C", "Flag France", "Flag Ireland", "Din Table 01", "Res Fh Diningtable", "Offroad Bale02", "Offroad Bale03", "Ven Shop 1 Counter", "Parasol 01 B", "Parasol 01", "Din Table 05", "Din Table 11", "Generator 03A", "Chip Fryer", "Food Van 02", "Ret Gassweetcount", "Grain Hopper", "Offroad Tyres01", "Bleachers 03", "Parking Hut 2", "Parking Hut 2B", "Streetlight 11A", "Road Memorial 02", "Res Msoncabinet", "Busstop 05", "Plough", "Res Wall", "Offroad Tyres01 Tu", "Rock 3 H", "Bed With Table 02", "Rock 1 C", "Bleachers 04", "Bleachers 04 Cr", "Pier Kiosk 01", "Pier Kiosk 02", "Pier Kiosk 03", "Basketball Net", "Ret Gc Bootdisp", "Pot Plant 01B", "Pot Plant 03B", "Pot Plant 03B Cr2", "Gazebo 03", "Streetlight 07A", "Streetlight 07B", "Sprayer", "Log 01", "Str Avunitm 01", "Str Avunitm 03", "Front Seat Row 01", "Res Son Desk", "Streetlight 08", "Log Af", "Streetlight 15A", "Hotel Clock 01", "Res M Bananaplant", "Rock 1 A", "Warehseshelf03", "Beach Bars 01", "Pile Dirt 06", "Acc Rugwoolm 01", "Acc Rugwoolm 02", "Acc Rugwoolm 03", "Acc Rugwoolm 04", "Oldlight 01A", "Corp Bk Balustrade", "Generator 03B", "Stn Sofacorn 01", "Rock 1 B", "Bed Table Wide 12", "Stn Sofacorn 08", "Stn Sofacorn 09", "Stn Sofacorn 07", "Stn Sofacorn 06", "Pile Dirt 02", "Parasol 02 B", "Parasol 02 C", "Parasol 02", "Stn Sofacorn 05", "Can Canoe", "Stn Sofacorn 10", "Res M Palmstairs", "Set Generator 01", "Set Generator 01 Cr", "P Spider 01C", "Parasol 05", "Streetlight 09", "Side Spreader", "Bleachers 05", "Bleachers 05 Cr", "Busstop 02", "Bleachers 02", "Ind Light 04", "Res Fh Sofa", "Res Mp Sofa" }
+_G.FreecamAttachModes = { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo" }
 _G.FreecamAttachPropModels = {
     ["Roue"]="prop_rub_wheel_02",
     ["Caisse"]="prop_box_wood06a",
@@ -11290,348 +11472,7 @@ _G.FreecamAttachPropModels = {
     ["Wall Light 09A"]="prop_wall_light_09a",
     ["Corp Cabshelves01"]="v_corp_cabshelves01",
     ["Corp Offshelf"]="v_corp_offshelf",
-    ["Corp Offshelfclo"]="v_corp_offshelfclo",
-    ["Corp Offshelfdark"]="v_corp_offshelfdark",
-    ["Res Tt Sofa"]="v_res_tt_sofa",
-    ["Corp Lidesk01"]="v_corp_lidesk01",
-    ["Corp Maindesk"]="v_corp_maindesk",
-    ["Corp Maindeskfd"]="v_corp_maindeskfd",
-    ["Corp Officedesk"]="v_corp_officedesk",
-    ["Corp Officedesk 5"]="v_corp_officedesk_5",
-    ["Corp Officedesk004"]="v_corp_officedesk004",
-    ["Corp Officedesk2"]="v_corp_officedesk2",
-    ["Generator 02A"]="prop_generator_02a",
-    ["Corp Divide"]="v_corp_divide",
-    ["Pot Plant 02C"]="prop_pot_plant_02c",
-    ["Rock 3 E"]="prop_rock_3_e",
-    ["Log Ab"]="prop_log_ab",
-    ["Corp Officedesk003"]="v_corp_officedesk003",
-    ["Corp Officedesk1"]="v_corp_officedesk1",
-    ["Windowbox B"]="prop_windowbox_b",
-    ["Apa V Ilev Fh Bedrmdoor"]="apa_v_ilev_fh_bedrmdoor",
-    ["Apa V Ilev Fh Heistdoor1"]="apa_v_ilev_fh_heistdoor1",
-    ["Bleachers 01"]="prop_bleachers_01",
-    ["Res Fh Coftbldisp"]="v_res_fh_coftbldisp",
-    ["Corp Deskseta"]="v_corp_deskseta",
-    ["Corp Desksetb"]="v_corp_desksetb",
-    ["Gascage01"]="prop_gascage01",
-    ["Old Farm 02"]="prop_old_farm_02",
-    ["Studio Light 02"]="prop_studio_light_02",
-    ["Garden Edging 02"]="prop_garden_edging_02",
-    ["Phonebox 04"]="prop_phonebox_04",
-    ["Ret Hd Hooks"]="v_ret_hd_hooks_",
-    ["Wall Light 15A"]="prop_wall_light_15a",
-    ["Corp Servercln"]="v_corp_servercln",
-    ["Corp Servers1"]="v_corp_servers1",
-    ["Corp Servers2"]="v_corp_servers2",
-    ["Armenian Gate"]="prop_armenian_gate",
-    ["Bench 11"]="prop_bench_11",
-    ["Cork Board"]="prop_cork_board",
-    ["Muster Wboard 01"]="prop_muster_wboard_01",
-    ["Muster Wboard 02"]="prop_muster_wboard_02",
-    ["W Board Blank"]="prop_w_board_blank",
-    ["W Board Blank 2"]="prop_w_board_blank_2",
-    ["Premier Fence 02"]="prop_premier_fence_02",
-    ["Str Sideboardm 02"]="apa_mp_h_str_sideboardm_02",
-    ["B Board Blank"]="prop_b_board_blank",
-    ["Surf Board 04"]="prop_surf_board_04",
-    ["Surf Board Ldn 04"]="prop_surf_board_ldn_04",
-    ["Table Para Comb 05"]="prop_table_para_comb_05",
-    ["Ret 247 Win1"]="v_ret_247_win1",
-    ["Bench 09"]="prop_bench_09",
-    ["Corp Partitionfd"]="v_corp_partitionfd",
-    ["Ret Gs Glass02"]="v_ret_gs_glass02",
-    ["Parasol 04D"]="prop_parasol_04d",
-    ["Parasol 04B"]="prop_parasol_04b",
-    ["Table Para Comb 02"]="prop_table_para_comb_02",
-    ["Str Sideboardm 03"]="apa_mp_h_str_sideboardm_03",
-    ["Parasol 04C"]="prop_parasol_04c",
-    ["Gr Prop Bunker Bed 01"]="gr_prop_bunker_bed_01",
-    ["Lit Floorlamp 05"]="apa_mp_h_lit_floorlamp_05",
-    ["Lit Floorlampnight 05"]="apa_mp_h_lit_floorlampnight_05",
-    ["Res Tre Bed2"]="v_res_tre_bed2",
-    ["Parasol 04"]="prop_parasol_04",
-    ["Res Tt Bed"]="v_res_tt_bed",
-    ["Potatodigger"]="prop_potatodigger",
-    ["Corp Cubiclefd"]="v_corp_cubiclefd",
-    ["Res Lestersbed"]="v_res_lestersbed",
-    ["Res Msonbed"]="v_res_msonbed",
-    ["Res Msonbed S"]="v_res_msonbed_s",
-    ["Log Aa"]="prop_log_aa",
-    ["Corp Post Open"]="v_corp_post_open",
-    ["Corp Postbox"]="v_corp_postbox",
-    ["Corp Postboxa"]="v_corp_postboxa",
-    ["Rock 1 F"]="prop_rock_1_f",
-    ["Bikerack 2"]="prop_bikerack_2",
-    ["Res M Sinkunit"]="v_res_m_sinkunit",
-    ["Kino Light 02"]="prop_kino_light_02",
-    ["Kayak 01"]="prop_kayak_01",
-    ["Kayak 01B"]="prop_kayak_01b",
-    ["Res Tre Bed1"]="v_res_tre_bed1",
-    ["Res Tre Bed1 Messy"]="v_res_tre_bed1_messy",
-    ["Cup Saucer 01"]="prop_cup_saucer_01",
-    ["Surf Board 01"]="prop_surf_board_01",
-    ["Surf Board Ldn 01"]="prop_surf_board_ldn_01",
-    ["Table Tennis"]="prop_table_tennis",
-    ["Bandsaw 01"]="prop_bandsaw_01",
-    ["Bush Dead 02"]="prop_bush_dead_02",
-    ["Res Tre Sofa Mess A"]="v_res_tre_sofa_mess_a",
-    ["Tre Sofa Mess A S"]="v_tre_sofa_mess_a_s",
-    ["Bed Double 08"]="apa_mp_h_bed_double_08",
-    ["Rock 3 B"]="prop_rock_3_b",
-    ["Worklight 04B"]="prop_worklight_04b",
-    ["Bush Med 05"]="prop_bush_med_05",
-    ["Res M H Sofa Sml"]="v_res_m_h_sofa_sml",
-    ["Shelves 01"]="prop_shelves_01",
-    ["Shelves 02"]="prop_shelves_02",
-    ["Bench 05"]="prop_bench_05",
-    ["Shelves 03"]="prop_shelves_03",
-    ["Bench 07"]="prop_bench_07",
-    ["Res D Bed"]="v_res_d_bed",
-    ["Fishing Rod 01"]="prop_fishing_rod_01",
-    ["Fishing Rod 02"]="prop_fishing_rod_02",
-    ["Log Ac"]="prop_log_ac",
-    ["Ret Fh Doorfrmwide"]="v_ret_fh_doorfrmwide",
-    ["Pot Plant 04C"]="prop_pot_plant_04c",
-    ["Ret Fh Shelf 01"]="v_ret_fh_shelf_01",
-    ["Ret Fh Shelf 02"]="v_ret_fh_shelf_02",
-    ["Ret Fh Shelf 03"]="v_ret_fh_shelf_03",
-    ["Ret Fh Shelf 04"]="v_ret_fh_shelf_04",
-    ["Pot Plant 02D"]="prop_pot_plant_02d",
-    ["Xmas Tree Int"]="prop_xmas_tree_int",
-    ["Bed Double 09"]="apa_mp_h_bed_double_09",
-    ["Res Picture Frame"]="v_res_picture_frame",
-    ["Creosote B 01"]="prop_creosote_b_01",
-    ["Bed Wide 05"]="apa_mp_h_bed_wide_05",
-    ["Ret Tat2stuff 06"]="v_ret_tat2stuff_06",
-    ["Rock 2 G"]="prop_rock_2_g",
-    ["Garden Edging 01"]="prop_garden_edging_01",
-    ["Couch Lg 07"]="prop_couch_lg_07",
-    ["Bush Med 07"]="prop_bush_med_07",
-    ["Str Shelffloorm 02"]="apa_mp_h_str_shelffloorm_02",
-    ["Pot Plant 01C"]="prop_pot_plant_01c",
-    ["Ret Tat2stuff 07"]="v_ret_tat2stuff_07",
-    ["Bush Ivy 01 1M"]="prop_bush_ivy_01_1m",
-    ["Bush Ivy 02 1M"]="prop_bush_ivy_02_1m",
-    ["Couch 03"]="prop_couch_03",
-    ["Parasol 01 Down"]="prop_parasol_01_down",
-    ["Bench 06"]="prop_bench_06",
-    ["Rock 1 D"]="prop_rock_1_d",
-    ["Ret Ml Win4"]="v_ret_ml_win4",
-    ["Ss1 Mpint Door L"]="apa_prop_ss1_mpint_door_l",
-    ["Ss1 Mpint Door R"]="apa_prop_ss1_mpint_door_r",
-    ["Hunterhide"]="prop_hunterhide",
-    ["Ret Ml Win5"]="v_ret_ml_win5",
-    ["Couch 04"]="prop_couch_04",
-    ["Couch Lg 08"]="prop_couch_lg_08",
-    ["Acc Rugwools 01"]="apa_mp_h_acc_rugwools_01",
-    ["Acc Rugwools 03"]="apa_mp_h_acc_rugwools_03",
-    ["Fernba"]="prop_fernba",
-    ["Table Para Comb 01"]="prop_table_para_comb_01",
-    ["Str Avunits 01"]="apa_mp_h_str_avunits_01",
-    ["Bench 10"]="prop_bench_10",
-    ["Beach Dip Bars 01"]="prop_beach_dip_bars_01",
-    ["Beach Dip Bars 02"]="prop_beach_dip_bars_02",
-    ["Strip Pole 01"]="prop_strip_pole_01",
-    ["Glass Panel 07"]="prop_glass_panel_07",
-    ["Beach Punchbag"]="prop_beach_punchbag",
-    ["Acc Plant Tall 01"]="apa_mp_h_acc_plant_tall_01",
-    ["Log Ae"]="prop_log_ae",
-    ["Couch Lg 06"]="prop_couch_lg_06",
-    ["Res Fh Sidebrddine"]="v_res_fh_sidebrddine",
-    ["Worklight 03A"]="prop_worklight_03a",
-    ["Corp Servrtwrfd"]="v_corp_servrtwrfd",
-    ["Corp Srvrrackfd"]="v_corp_srvrrackfd",
-    ["Corp Srvrtwrsfd"]="v_corp_srvrtwrsfd",
-    ["Poolskimmer"]="prop_poolskimmer",
-    ["Cont Chiller 01"]="prop_cont_chiller_01",
-    ["Pot Plant 03A"]="prop_pot_plant_03a",
-    ["Pot Plant Inter 03A"]="prop_pot_plant_inter_03a",
-    ["Worklight 03B"]="prop_worklight_03b",
-    ["Burgerstand 01"]="prop_burgerstand_01",
-    ["Pooltable 02"]="prop_pooltable_02",
-    ["Pooltable 3B"]="prop_pooltable_3b",
-    ["Bush Med 06"]="prop_bush_med_06",
-    ["Str Avunits 04"]="apa_mp_h_str_avunits_04",
-    ["Ret Tat2stuff 05"]="v_ret_tat2stuff_05",
-    ["Bush Med 03"]="prop_bush_med_03",
-    ["Bush Med 03 Cr"]="prop_bush_med_03_cr",
-    ["Bush Med 03 Cr2"]="prop_bush_med_03_cr2",
-    ["Bush Ivy 01 L"]="prop_bush_ivy_01_l",
-    ["Bush Ivy 02 L"]="prop_bush_ivy_02_l",
-    ["Gazebo 01"]="prop_gazebo_01",
-    ["Bush Ivy 01 R"]="prop_bush_ivy_01_r",
-    ["Bush Ivy 02 R"]="prop_bush_ivy_02_r",
-    ["Res Fh Benchlong"]="v_res_fh_benchlong",
-    ["Pot Plant 03C"]="prop_pot_plant_03c",
-    ["Str Sideboardl 11"]="apa_mp_h_str_sideboardl_11",
-    ["Bench 08"]="prop_bench_08",
-    ["Ret Fh Dinetable"]="v_ret_fh_dinetable",
-    ["Res Mplanttongue"]="v_res_mplanttongue",
-    ["Movie Rack"]="prop_movie_rack",
-    ["Res Cabinet"]="v_res_cabinet",
-    ["Str Sideboardl 06"]="apa_mp_h_str_sideboardl_06",
-    ["Res M H Sofa"]="v_res_m_h_sofa",
-    ["Homeles Shelter 02"]="prop_homeles_shelter_02",
-    ["Str Sideboardl 09"]="apa_mp_h_str_sideboardl_09",
-    ["Gazebo 02"]="prop_gazebo_02",
-    ["Res R Sofa"]="v_res_r_sofa",
-    ["Generator 04"]="prop_generator_04",
-    ["Streetlight 12A"]="prop_streetlight_12a",
-    ["Homeles Shelter 01"]="prop_homeles_shelter_01",
-    ["Str Sideboardl 13"]="apa_mp_h_str_sideboardl_13",
-    ["Am Box Wood 01"]="prop_am_box_wood_01",
-    ["Wait Bench 01"]="prop_wait_bench_01",
-    ["Glass Panel 06"]="prop_glass_panel_06",
-    ["Aerial 01B"]="prop_aerial_01b",
-    ["Table Para Comb 03"]="prop_table_para_comb_03",
-    ["Res Fh Sidebrdlng"]="v_res_fh_sidebrdlng",
-    ["Res Fh Sidebrdlngb"]="v_res_fh_sidebrdlngb",
-    ["Bush Ornament 03"]="prop_bush_ornament_03",
-    ["Corp Bk Flag"]="v_corp_bk_flag",
-    ["Wall Light 11"]="prop_wall_light_11",
-    ["Glass Panel 03"]="prop_glass_panel_03",
-    ["Spray Jackleg"]="prop_spray_jackleg",
-    ["Parasol 03"]="prop_parasol_03",
-    ["Mov Sechutwin"]="prop_mov_sechutwin",
-    ["Parasol 03 B"]="prop_parasol_03_b",
-    ["Corp Go Glass2"]="v_corp_go_glass2",
-    ["Str Sideboardl 14"]="apa_mp_h_str_sideboardl_14",
-    ["Owl Totem 01"]="prop_owl_totem_01",
-    ["Parasol 03 C"]="prop_parasol_03_c",
-    ["Oldplough1"]="prop_oldplough1",
-    ["Din Table 04"]="apa_mp_h_din_table_04",
-    ["Rock 4 Big"]="prop_rock_4_big",
-    ["Bush Ornament 02"]="prop_bush_ornament_02",
-    ["Ret Ml Methsweets"]="v_ret_ml_methsweets",
-    ["Beer Neon 01"]="prop_beer_neon_01",
-    ["Bush Ivy 01 Bk"]="prop_bush_ivy_01_bk",
-    ["Aerial 01A"]="prop_aerial_01a",
-    ["Studio Light 03"]="prop_studio_light_03",
-    ["Hotdogstand 01"]="prop_hotdogstand_01",
-    ["Log Ad"]="prop_log_ad",
-    ["Bush Ivy 01 2M"]="prop_bush_ivy_01_2m",
-    ["Bush Ivy 02 2M"]="prop_bush_ivy_02_2m",
-    ["Rock 2 C"]="prop_rock_2_c",
-    ["Rock 2 D"]="prop_rock_2_d",
-    ["Bush Ornament 04"]="prop_bush_ornament_04",
-    ["Rock 4 Big2"]="prop_rock_4_big2",
-    ["Chickencoop A"]="prop_chickencoop_a",
-    ["Str Shelffreel 01"]="apa_mp_h_str_shelffreel_01",
-    ["Beach Lg Surf"]="prop_beach_lg_surf",
-    ["Ret Tatstuff01"]="v_ret_tatstuff01",
-    ["Cora Clam 01"]="prop_cora_clam_01",
-    ["Streetlight 12B"]="prop_streetlight_12b",
-    ["Table Para Comb 04"]="prop_table_para_comb_04",
-    ["Bush Ornament 01"]="prop_bush_ornament_01",
-    ["Rock 3 I"]="prop_rock_3_i",
-    ["Food Van 01"]="prop_food_van_01",
-    ["Mov Sechutwin 02"]="prop_mov_sechutwin_02",
-    ["Corp Fib Glass Thin"]="v_corp_fib_glass_thin",
-    ["Corp Fib Glass1"]="v_corp_fib_glass1",
-    ["Bush Ivy 01 Pot"]="prop_bush_ivy_01_pot",
-    ["Bush Ivy 02 Pot"]="prop_bush_ivy_02_pot",
-    ["Glass Panel 05"]="prop_glass_panel_05",
-    ["Lts Offroad Tyres01"]="lts_prop_lts_offroad_tyres01",
-    ["Juicestand"]="prop_juicestand",
-    ["Res Wall Cornertop"]="v_res_wall_cornertop",
-    ["Corp Conftable2"]="v_corp_conftable2",
-    ["Corp Conftable3"]="v_corp_conftable3",
-    ["Din Table 06"]="apa_mp_h_din_table_06",
-    ["Parasol 01 C"]="prop_parasol_01_c",
-    ["Flag France"]="apa_prop_flag_france",
-    ["Flag Ireland"]="apa_prop_flag_ireland",
-    ["Din Table 01"]="apa_mp_h_din_table_01",
-    ["Res Fh Diningtable"]="v_res_fh_diningtable",
-    ["Offroad Bale02"]="prop_offroad_bale02",
-    ["Offroad Bale03"]="prop_offroad_bale03",
-    ["Ven Shop 1 Counter"]="prop_ven_shop_1_counter",
-    ["Parasol 01 B"]="prop_parasol_01_b",
-    ["Parasol 01"]="prop_parasol_01",
-    ["Din Table 05"]="apa_mp_h_din_table_05",
-    ["Din Table 11"]="apa_mp_h_din_table_11",
-    ["Generator 03A"]="prop_generator_03a",
-    ["Chip Fryer"]="prop_chip_fryer",
-    ["Food Van 02"]="prop_food_van_02",
-    ["Ret Gassweetcount"]="v_ret_gassweetcount",
-    ["Grain Hopper"]="prop_grain_hopper",
-    ["Offroad Tyres01"]="prop_offroad_tyres01",
-    ["Bleachers 03"]="prop_bleachers_03",
-    ["Parking Hut 2"]="prop_parking_hut_2",
-    ["Parking Hut 2B"]="prop_parking_hut_2b",
-    ["Streetlight 11A"]="prop_streetlight_11a",
-    ["Road Memorial 02"]="prop_road_memorial_02",
-    ["Res Msoncabinet"]="v_res_msoncabinet",
-    ["Busstop 05"]="prop_busstop_05",
-    ["Plough"]="prop_plough",
-    ["Res Wall"]="v_res_wall",
-    ["Offroad Tyres01 Tu"]="prop_offroad_tyres01_tu",
-    ["Rock 3 H"]="prop_rock_3_h",
-    ["Bed With Table 02"]="apa_mp_h_bed_with_table_02",
-    ["Rock 1 C"]="prop_rock_1_c",
-    ["Bleachers 04"]="prop_bleachers_04",
-    ["Bleachers 04 Cr"]="prop_bleachers_04_cr",
-    ["Pier Kiosk 01"]="prop_pier_kiosk_01",
-    ["Pier Kiosk 02"]="prop_pier_kiosk_02",
-    ["Pier Kiosk 03"]="prop_pier_kiosk_03",
-    ["Basketball Net"]="prop_basketball_net",
-    ["Ret Gc Bootdisp"]="v_ret_gc_bootdisp",
-    ["Pot Plant 01B"]="prop_pot_plant_01b",
-    ["Pot Plant 03B"]="prop_pot_plant_03b",
-    ["Pot Plant 03B Cr2"]="prop_pot_plant_03b_cr2",
-    ["Gazebo 03"]="prop_gazebo_03",
-    ["Streetlight 07A"]="prop_streetlight_07a",
-    ["Streetlight 07B"]="prop_streetlight_07b",
-    ["Sprayer"]="prop_sprayer",
-    ["Log 01"]="prop_log_01",
-    ["Str Avunitm 01"]="apa_mp_h_str_avunitm_01",
-    ["Str Avunitm 03"]="apa_mp_h_str_avunitm_03",
-    ["Front Seat Row 01"]="prop_front_seat_row_01",
-    ["Res Son Desk"]="v_res_son_desk",
-    ["Streetlight 08"]="prop_streetlight_08",
-    ["Log Af"]="prop_log_af",
-    ["Streetlight 15A"]="prop_streetlight_15a",
-    ["Hotel Clock 01"]="prop_hotel_clock_01",
-    ["Res M Bananaplant"]="v_res_m_bananaplant",
-    ["Rock 1 A"]="prop_rock_1_a",
-    ["Warehseshelf03"]="prop_warehseshelf03",
-    ["Beach Bars 01"]="prop_beach_bars_01",
-    ["Pile Dirt 06"]="prop_pile_dirt_06",
-    ["Acc Rugwoolm 01"]="apa_mp_h_acc_rugwoolm_01",
-    ["Acc Rugwoolm 02"]="apa_mp_h_acc_rugwoolm_02",
-    ["Acc Rugwoolm 03"]="apa_mp_h_acc_rugwoolm_03",
-    ["Acc Rugwoolm 04"]="apa_mp_h_acc_rugwoolm_04",
-    ["Oldlight 01A"]="prop_oldlight_01a",
-    ["Corp Bk Balustrade"]="v_corp_bk_balustrade",
-    ["Generator 03B"]="prop_generator_03b",
-    ["Stn Sofacorn 01"]="apa_mp_h_stn_sofacorn_01",
-    ["Rock 1 B"]="prop_rock_1_b",
-    ["Bed Table Wide 12"]="apa_mp_h_bed_table_wide_12",
-    ["Stn Sofacorn 08"]="apa_mp_h_stn_sofacorn_08",
-    ["Stn Sofacorn 09"]="apa_mp_h_stn_sofacorn_09",
-    ["Stn Sofacorn 07"]="apa_mp_h_stn_sofacorn_07",
-    ["Stn Sofacorn 06"]="apa_mp_h_stn_sofacorn_06",
-    ["Pile Dirt 02"]="prop_pile_dirt_02",
-    ["Parasol 02 B"]="prop_parasol_02_b",
-    ["Parasol 02 C"]="prop_parasol_02_c",
-    ["Parasol 02"]="prop_parasol_02",
-    ["Stn Sofacorn 05"]="apa_mp_h_stn_sofacorn_05",
-    ["Can Canoe"]="prop_can_canoe",
-    ["Stn Sofacorn 10"]="apa_mp_h_stn_sofacorn_10",
-    ["Res M Palmstairs"]="v_res_m_palmstairs",
-    ["Set Generator 01"]="prop_set_generator_01",
-    ["Set Generator 01 Cr"]="prop_set_generator_01_cr",
-    ["P Spider 01C"]="prop_p_spider_01c",
-    ["Parasol 05"]="prop_parasol_05",
-    ["Streetlight 09"]="prop_streetlight_09",
-    ["Side Spreader"]="prop_side_spreader",
-    ["Bleachers 05"]="prop_bleachers_05",
-    ["Bleachers 05 Cr"]="prop_bleachers_05_cr",
-    ["Busstop 02"]="prop_busstop_02",
-    ["Bleachers 02"]="prop_bleachers_02",
-    ["Ind Light 04"]="prop_ind_light_04",
-    ["Res Fh Sofa"]="v_res_fh_sofa",
-    ["Res Mp Sofa"]="v_res_mp_sofa"
+    ["Corp Offshelfclo"]="v_corp_offshelfclo"
 }
 _G.FreecamAttachModeIdx = 1
 _G.TpPassengerDestIdx = 1  -- default: first destination
@@ -12705,7 +12546,7 @@ function HandleInputMenu()
                     end
                 end
 
-                local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo", "Corp Offshelfdark", "Res Tt Sofa", "Corp Lidesk01", "Corp Maindesk", "Corp Maindeskfd", "Corp Officedesk", "Corp Officedesk 5", "Corp Officedesk004", "Corp Officedesk2", "Generator 02A", "Corp Divide", "Pot Plant 02C", "Rock 3 E", "Log Ab", "Corp Officedesk003", "Corp Officedesk1", "Windowbox B", "Apa V Ilev Fh Bedrmdoor", "Apa V Ilev Fh Heistdoor1", "Bleachers 01", "Res Fh Coftbldisp", "Corp Deskseta", "Corp Desksetb", "Gascage01", "Old Farm 02", "Studio Light 02", "Garden Edging 02", "Phonebox 04", "Ret Hd Hooks", "Wall Light 15A", "Corp Servercln", "Corp Servers1", "Corp Servers2", "Armenian Gate", "Bench 11", "Cork Board", "Muster Wboard 01", "Muster Wboard 02", "W Board Blank", "W Board Blank 2", "Premier Fence 02", "Str Sideboardm 02", "B Board Blank", "Surf Board 04", "Surf Board Ldn 04", "Table Para Comb 05", "Ret 247 Win1", "Bench 09", "Corp Partitionfd", "Ret Gs Glass02", "Parasol 04D", "Parasol 04B", "Table Para Comb 02", "Str Sideboardm 03", "Parasol 04C", "Gr Prop Bunker Bed 01", "Lit Floorlamp 05", "Lit Floorlampnight 05", "Res Tre Bed2", "Parasol 04", "Res Tt Bed", "Potatodigger", "Corp Cubiclefd", "Res Lestersbed", "Res Msonbed", "Res Msonbed S", "Log Aa", "Corp Post Open", "Corp Postbox", "Corp Postboxa", "Rock 1 F", "Bikerack 2", "Res M Sinkunit", "Kino Light 02", "Kayak 01", "Kayak 01B", "Res Tre Bed1", "Res Tre Bed1 Messy", "Cup Saucer 01", "Surf Board 01", "Surf Board Ldn 01", "Table Tennis", "Bandsaw 01", "Bush Dead 02", "Res Tre Sofa Mess A", "Tre Sofa Mess A S", "Bed Double 08", "Rock 3 B", "Worklight 04B", "Bush Med 05", "Res M H Sofa Sml", "Shelves 01", "Shelves 02", "Bench 05", "Shelves 03", "Bench 07", "Res D Bed", "Fishing Rod 01", "Fishing Rod 02", "Log Ac", "Ret Fh Doorfrmwide", "Pot Plant 04C", "Ret Fh Shelf 01", "Ret Fh Shelf 02", "Ret Fh Shelf 03", "Ret Fh Shelf 04", "Pot Plant 02D", "Xmas Tree Int", "Bed Double 09", "Res Picture Frame", "Creosote B 01", "Bed Wide 05", "Ret Tat2stuff 06", "Rock 2 G", "Garden Edging 01", "Couch Lg 07", "Bush Med 07", "Str Shelffloorm 02", "Pot Plant 01C", "Ret Tat2stuff 07", "Bush Ivy 01 1M", "Bush Ivy 02 1M", "Couch 03", "Parasol 01 Down", "Bench 06", "Rock 1 D", "Ret Ml Win4", "Ss1 Mpint Door L", "Ss1 Mpint Door R", "Hunterhide", "Ret Ml Win5", "Couch 04", "Couch Lg 08", "Acc Rugwools 01", "Acc Rugwools 03", "Fernba", "Table Para Comb 01", "Str Avunits 01", "Bench 10", "Beach Dip Bars 01", "Beach Dip Bars 02", "Strip Pole 01", "Glass Panel 07", "Beach Punchbag", "Acc Plant Tall 01", "Log Ae", "Couch Lg 06", "Res Fh Sidebrddine", "Worklight 03A", "Corp Servrtwrfd", "Corp Srvrrackfd", "Corp Srvrtwrsfd", "Poolskimmer", "Cont Chiller 01", "Pot Plant 03A", "Pot Plant Inter 03A", "Worklight 03B", "Burgerstand 01", "Pooltable 02", "Pooltable 3B", "Bush Med 06", "Str Avunits 04", "Ret Tat2stuff 05", "Bush Med 03", "Bush Med 03 Cr", "Bush Med 03 Cr2", "Bush Ivy 01 L", "Bush Ivy 02 L", "Gazebo 01", "Bush Ivy 01 R", "Bush Ivy 02 R", "Res Fh Benchlong", "Pot Plant 03C", "Str Sideboardl 11", "Bench 08", "Ret Fh Dinetable", "Res Mplanttongue", "Movie Rack", "Res Cabinet", "Str Sideboardl 06", "Res M H Sofa", "Homeles Shelter 02", "Str Sideboardl 09", "Gazebo 02", "Res R Sofa", "Generator 04", "Streetlight 12A", "Homeles Shelter 01", "Str Sideboardl 13", "Am Box Wood 01", "Wait Bench 01", "Glass Panel 06", "Aerial 01B", "Table Para Comb 03", "Res Fh Sidebrdlng", "Res Fh Sidebrdlngb", "Bush Ornament 03", "Corp Bk Flag", "Wall Light 11", "Glass Panel 03", "Spray Jackleg", "Parasol 03", "Mov Sechutwin", "Parasol 03 B", "Corp Go Glass2", "Str Sideboardl 14", "Owl Totem 01", "Parasol 03 C", "Oldplough1", "Din Table 04", "Rock 4 Big", "Bush Ornament 02", "Ret Ml Methsweets", "Beer Neon 01", "Bush Ivy 01 Bk", "Aerial 01A", "Studio Light 03", "Hotdogstand 01", "Log Ad", "Bush Ivy 01 2M", "Bush Ivy 02 2M", "Rock 2 C", "Rock 2 D", "Bush Ornament 04", "Rock 4 Big2", "Chickencoop A", "Str Shelffreel 01", "Beach Lg Surf", "Ret Tatstuff01", "Cora Clam 01", "Streetlight 12B", "Table Para Comb 04", "Bush Ornament 01", "Rock 3 I", "Food Van 01", "Mov Sechutwin 02", "Corp Fib Glass Thin", "Corp Fib Glass1", "Bush Ivy 01 Pot", "Bush Ivy 02 Pot", "Glass Panel 05", "Lts Offroad Tyres01", "Juicestand", "Res Wall Cornertop", "Corp Conftable2", "Corp Conftable3", "Din Table 06", "Parasol 01 C", "Flag France", "Flag Ireland", "Din Table 01", "Res Fh Diningtable", "Offroad Bale02", "Offroad Bale03", "Ven Shop 1 Counter", "Parasol 01 B", "Parasol 01", "Din Table 05", "Din Table 11", "Generator 03A", "Chip Fryer", "Food Van 02", "Ret Gassweetcount", "Grain Hopper", "Offroad Tyres01", "Bleachers 03", "Parking Hut 2", "Parking Hut 2B", "Streetlight 11A", "Road Memorial 02", "Res Msoncabinet", "Busstop 05", "Plough", "Res Wall", "Offroad Tyres01 Tu", "Rock 3 H", "Bed With Table 02", "Rock 1 C", "Bleachers 04", "Bleachers 04 Cr", "Pier Kiosk 01", "Pier Kiosk 02", "Pier Kiosk 03", "Basketball Net", "Ret Gc Bootdisp", "Pot Plant 01B", "Pot Plant 03B", "Pot Plant 03B Cr2", "Gazebo 03", "Streetlight 07A", "Streetlight 07B", "Sprayer", "Log 01", "Str Avunitm 01", "Str Avunitm 03", "Front Seat Row 01", "Res Son Desk", "Streetlight 08", "Log Af", "Streetlight 15A", "Hotel Clock 01", "Res M Bananaplant", "Rock 1 A", "Warehseshelf03", "Beach Bars 01", "Pile Dirt 06", "Acc Rugwoolm 01", "Acc Rugwoolm 02", "Acc Rugwoolm 03", "Acc Rugwoolm 04", "Oldlight 01A", "Corp Bk Balustrade", "Generator 03B", "Stn Sofacorn 01", "Rock 1 B", "Bed Table Wide 12", "Stn Sofacorn 08", "Stn Sofacorn 09", "Stn Sofacorn 07", "Stn Sofacorn 06", "Pile Dirt 02", "Parasol 02 B", "Parasol 02 C", "Parasol 02", "Stn Sofacorn 05", "Can Canoe", "Stn Sofacorn 10", "Res M Palmstairs", "Set Generator 01", "Set Generator 01 Cr", "P Spider 01C", "Parasol 05", "Streetlight 09", "Side Spreader", "Bleachers 05", "Bleachers 05 Cr", "Busstop 02", "Bleachers 02", "Ind Light 04", "Res Fh Sofa", "Res Mp Sofa" }
+                local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo" }
                 local currentMode = modes[_G.FreecamAttachModeIdx or 1] or "Full Box"
 
                 CreateThread(function()
@@ -13767,7 +13608,7 @@ function HandleInputMenu()
     if freecam_active and FreecamOptions[FreecamSelectedOption] == "Attach" then
         local leftArrow  = IsDisabledControlJustPressed(0, 174)
         local rightArrow = IsDisabledControlJustPressed(0, 175)
-        local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo", "Corp Offshelfdark", "Res Tt Sofa", "Corp Lidesk01", "Corp Maindesk", "Corp Maindeskfd", "Corp Officedesk", "Corp Officedesk 5", "Corp Officedesk004", "Corp Officedesk2", "Generator 02A", "Corp Divide", "Pot Plant 02C", "Rock 3 E", "Log Ab", "Corp Officedesk003", "Corp Officedesk1", "Windowbox B", "Apa V Ilev Fh Bedrmdoor", "Apa V Ilev Fh Heistdoor1", "Bleachers 01", "Res Fh Coftbldisp", "Corp Deskseta", "Corp Desksetb", "Gascage01", "Old Farm 02", "Studio Light 02", "Garden Edging 02", "Phonebox 04", "Ret Hd Hooks", "Wall Light 15A", "Corp Servercln", "Corp Servers1", "Corp Servers2", "Armenian Gate", "Bench 11", "Cork Board", "Muster Wboard 01", "Muster Wboard 02", "W Board Blank", "W Board Blank 2", "Premier Fence 02", "Str Sideboardm 02", "B Board Blank", "Surf Board 04", "Surf Board Ldn 04", "Table Para Comb 05", "Ret 247 Win1", "Bench 09", "Corp Partitionfd", "Ret Gs Glass02", "Parasol 04D", "Parasol 04B", "Table Para Comb 02", "Str Sideboardm 03", "Parasol 04C", "Gr Prop Bunker Bed 01", "Lit Floorlamp 05", "Lit Floorlampnight 05", "Res Tre Bed2", "Parasol 04", "Res Tt Bed", "Potatodigger", "Corp Cubiclefd", "Res Lestersbed", "Res Msonbed", "Res Msonbed S", "Log Aa", "Corp Post Open", "Corp Postbox", "Corp Postboxa", "Rock 1 F", "Bikerack 2", "Res M Sinkunit", "Kino Light 02", "Kayak 01", "Kayak 01B", "Res Tre Bed1", "Res Tre Bed1 Messy", "Cup Saucer 01", "Surf Board 01", "Surf Board Ldn 01", "Table Tennis", "Bandsaw 01", "Bush Dead 02", "Res Tre Sofa Mess A", "Tre Sofa Mess A S", "Bed Double 08", "Rock 3 B", "Worklight 04B", "Bush Med 05", "Res M H Sofa Sml", "Shelves 01", "Shelves 02", "Bench 05", "Shelves 03", "Bench 07", "Res D Bed", "Fishing Rod 01", "Fishing Rod 02", "Log Ac", "Ret Fh Doorfrmwide", "Pot Plant 04C", "Ret Fh Shelf 01", "Ret Fh Shelf 02", "Ret Fh Shelf 03", "Ret Fh Shelf 04", "Pot Plant 02D", "Xmas Tree Int", "Bed Double 09", "Res Picture Frame", "Creosote B 01", "Bed Wide 05", "Ret Tat2stuff 06", "Rock 2 G", "Garden Edging 01", "Couch Lg 07", "Bush Med 07", "Str Shelffloorm 02", "Pot Plant 01C", "Ret Tat2stuff 07", "Bush Ivy 01 1M", "Bush Ivy 02 1M", "Couch 03", "Parasol 01 Down", "Bench 06", "Rock 1 D", "Ret Ml Win4", "Ss1 Mpint Door L", "Ss1 Mpint Door R", "Hunterhide", "Ret Ml Win5", "Couch 04", "Couch Lg 08", "Acc Rugwools 01", "Acc Rugwools 03", "Fernba", "Table Para Comb 01", "Str Avunits 01", "Bench 10", "Beach Dip Bars 01", "Beach Dip Bars 02", "Strip Pole 01", "Glass Panel 07", "Beach Punchbag", "Acc Plant Tall 01", "Log Ae", "Couch Lg 06", "Res Fh Sidebrddine", "Worklight 03A", "Corp Servrtwrfd", "Corp Srvrrackfd", "Corp Srvrtwrsfd", "Poolskimmer", "Cont Chiller 01", "Pot Plant 03A", "Pot Plant Inter 03A", "Worklight 03B", "Burgerstand 01", "Pooltable 02", "Pooltable 3B", "Bush Med 06", "Str Avunits 04", "Ret Tat2stuff 05", "Bush Med 03", "Bush Med 03 Cr", "Bush Med 03 Cr2", "Bush Ivy 01 L", "Bush Ivy 02 L", "Gazebo 01", "Bush Ivy 01 R", "Bush Ivy 02 R", "Res Fh Benchlong", "Pot Plant 03C", "Str Sideboardl 11", "Bench 08", "Ret Fh Dinetable", "Res Mplanttongue", "Movie Rack", "Res Cabinet", "Str Sideboardl 06", "Res M H Sofa", "Homeles Shelter 02", "Str Sideboardl 09", "Gazebo 02", "Res R Sofa", "Generator 04", "Streetlight 12A", "Homeles Shelter 01", "Str Sideboardl 13", "Am Box Wood 01", "Wait Bench 01", "Glass Panel 06", "Aerial 01B", "Table Para Comb 03", "Res Fh Sidebrdlng", "Res Fh Sidebrdlngb", "Bush Ornament 03", "Corp Bk Flag", "Wall Light 11", "Glass Panel 03", "Spray Jackleg", "Parasol 03", "Mov Sechutwin", "Parasol 03 B", "Corp Go Glass2", "Str Sideboardl 14", "Owl Totem 01", "Parasol 03 C", "Oldplough1", "Din Table 04", "Rock 4 Big", "Bush Ornament 02", "Ret Ml Methsweets", "Beer Neon 01", "Bush Ivy 01 Bk", "Aerial 01A", "Studio Light 03", "Hotdogstand 01", "Log Ad", "Bush Ivy 01 2M", "Bush Ivy 02 2M", "Rock 2 C", "Rock 2 D", "Bush Ornament 04", "Rock 4 Big2", "Chickencoop A", "Str Shelffreel 01", "Beach Lg Surf", "Ret Tatstuff01", "Cora Clam 01", "Streetlight 12B", "Table Para Comb 04", "Bush Ornament 01", "Rock 3 I", "Food Van 01", "Mov Sechutwin 02", "Corp Fib Glass Thin", "Corp Fib Glass1", "Bush Ivy 01 Pot", "Bush Ivy 02 Pot", "Glass Panel 05", "Lts Offroad Tyres01", "Juicestand", "Res Wall Cornertop", "Corp Conftable2", "Corp Conftable3", "Din Table 06", "Parasol 01 C", "Flag France", "Flag Ireland", "Din Table 01", "Res Fh Diningtable", "Offroad Bale02", "Offroad Bale03", "Ven Shop 1 Counter", "Parasol 01 B", "Parasol 01", "Din Table 05", "Din Table 11", "Generator 03A", "Chip Fryer", "Food Van 02", "Ret Gassweetcount", "Grain Hopper", "Offroad Tyres01", "Bleachers 03", "Parking Hut 2", "Parking Hut 2B", "Streetlight 11A", "Road Memorial 02", "Res Msoncabinet", "Busstop 05", "Plough", "Res Wall", "Offroad Tyres01 Tu", "Rock 3 H", "Bed With Table 02", "Rock 1 C", "Bleachers 04", "Bleachers 04 Cr", "Pier Kiosk 01", "Pier Kiosk 02", "Pier Kiosk 03", "Basketball Net", "Ret Gc Bootdisp", "Pot Plant 01B", "Pot Plant 03B", "Pot Plant 03B Cr2", "Gazebo 03", "Streetlight 07A", "Streetlight 07B", "Sprayer", "Log 01", "Str Avunitm 01", "Str Avunitm 03", "Front Seat Row 01", "Res Son Desk", "Streetlight 08", "Log Af", "Streetlight 15A", "Hotel Clock 01", "Res M Bananaplant", "Rock 1 A", "Warehseshelf03", "Beach Bars 01", "Pile Dirt 06", "Acc Rugwoolm 01", "Acc Rugwoolm 02", "Acc Rugwoolm 03", "Acc Rugwoolm 04", "Oldlight 01A", "Corp Bk Balustrade", "Generator 03B", "Stn Sofacorn 01", "Rock 1 B", "Bed Table Wide 12", "Stn Sofacorn 08", "Stn Sofacorn 09", "Stn Sofacorn 07", "Stn Sofacorn 06", "Pile Dirt 02", "Parasol 02 B", "Parasol 02 C", "Parasol 02", "Stn Sofacorn 05", "Can Canoe", "Stn Sofacorn 10", "Res M Palmstairs", "Set Generator 01", "Set Generator 01 Cr", "P Spider 01C", "Parasol 05", "Streetlight 09", "Side Spreader", "Bleachers 05", "Bleachers 05 Cr", "Busstop 02", "Bleachers 02", "Ind Light 04", "Res Fh Sofa", "Res Mp Sofa" }
+        local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo" }
         local total = #modes
         if rightArrow then
             local cur = _G.FreecamAttachModeIdx or 1
@@ -17755,34 +17596,78 @@ end
 -- ====================== TOUR DE VÉHICULES ======================
 -- Fonctionne comme le Ramp : ENTER empile tous les vÃ©hicules proches d'un coup
 -- G pour tout dÃ©tacher
--- ====================== NO SPREAD / NO RECOIL =========================
-CreateThread(function()
-    local _lastSafePitch = 0.0
-    while true do
-        Wait(0)
-        local ped = PlayerPedId()
-
-        -- No Spread : SetPedAccuracy max chaque frame
-        if Menu.State.noSpreadActive then
-            pcall(SetPedAccuracy, ped, 100)
-        end
-
-        -- No Recoil : stabilise le pitch camera pendant le tir
-        if Menu.State.noRecoilActive then
-            local shooting = IsPedShooting(ped)
-            local ok, pitch = pcall(GetGameplayCamRelativePitch)
-            if ok then
-                if not shooting then
-                    _lastSafePitch = pitch
-                else
-                    pcall(SetGameplayCamRelativePitch, _lastSafePitch, 1.0)
-                end
+-- Weapon modifiers are applied every frame while active because game scripts can
+-- reapply the weapon metadata between shots. Restore cached values on disable.
+do
+    local spreadOriginal,recoilOriginal={},{}
+    local unarmed=GetHashKey("WEAPON_UNARMED")
+    local previousWeapon=nil
+    local lastPitch=nil
+    local recoilFrames=0
+    local function restore(cache,setter,current,enabled)
+        for hash,value in pairs(cache) do
+            if not enabled or hash~=current then
+                if type(setter)=="function" then pcall(setter,hash,value) end
+                cache[hash]=nil
             end
         end
     end
-end)
-
--- ====================== UNLOCK ALL VEHICLES ======================
+    function Menu.Actions.RestoreWeaponModifiers()
+        Menu.State.noSpreadActive=false
+        Menu.State.noRecoilActive=false
+        restore(spreadOriginal,SetWeaponAccuracySpread,nil,false)
+        restore(recoilOriginal,SetWeaponRecoilShakeAmplitude,nil,false)
+        previousWeapon,lastPitch,recoilFrames=nil,nil,0
+    end
+    CreateThread(function()
+        while true do
+            local spread=Menu.State.noSpreadActive==true
+            local recoil=Menu.State.noRecoilActive==true
+            Wait((spread or recoil or next(spreadOriginal) or next(recoilOriginal)) and 0 or 250)
+            spread=Menu.State.noSpreadActive==true
+            recoil=Menu.State.noRecoilActive==true
+            local ped=PlayerPedId()
+            local hash=ped and DoesEntityExist(ped) and GetSelectedPedWeapon(ped) or nil
+            if hash==0 or hash==unarmed then hash=nil end
+            restore(spreadOriginal,SetWeaponAccuracySpread,hash,spread)
+            restore(recoilOriginal,SetWeaponRecoilShakeAmplitude,hash,recoil)
+            if hash~=previousWeapon then
+                previousWeapon,lastPitch,recoilFrames=hash,nil,0
+            end
+            if hash and spread and type(SetWeaponAccuracySpread)=="function" then
+                if spreadOriginal[hash]==nil and type(GetWeaponAccuracySpread)=="function" then
+                    local ok,value=pcall(GetWeaponAccuracySpread,hash)
+                    if ok and type(value)=="number" then spreadOriginal[hash]=value end
+                end
+                pcall(SetWeaponAccuracySpread,hash,0.0)
+            end
+            if hash and recoil then
+                if type(SetWeaponRecoilShakeAmplitude)=="function" then
+                    if recoilOriginal[hash]==nil and type(GetWeaponRecoilShakeAmplitude)=="function" then
+                        local ok,value=pcall(GetWeaponRecoilShakeAmplitude,hash)
+                        if ok and type(value)=="number" then recoilOriginal[hash]=value end
+                    end
+                    pcall(SetWeaponRecoilShakeAmplitude,hash,0.0)
+                end
+                -- Weapon shake and the camera pitch kick are separate effects.
+                -- Restore the pitch from immediately before the shot for two frames.
+                if type(GetGameplayCamRelativePitch)=="function" and type(SetGameplayCamRelativePitch)=="function" then
+                    local aiming=IsPlayerFreeAiming(PlayerId()) or IsControlPressed(0,24)
+                    if aiming and IsPedShooting(ped) then recoilFrames=2 end
+                    if aiming and recoilFrames>0 and lastPitch then
+                        pcall(SetGameplayCamRelativePitch,lastPitch,1.0)
+                        recoilFrames=recoilFrames-1
+                    elseif not aiming then
+                        recoilFrames=0
+                    end
+                    if recoilFrames==0 then lastPitch=GetGameplayCamRelativePitch() end
+                end
+            else
+                lastPitch,recoilFrames=nil,0
+            end
+        end
+    end)
+end-- ====================== UNLOCK ALL VEHICLES ======================
 CreateThread(function()
     while true do
         Wait(300)
@@ -21121,7 +21006,7 @@ end)
 ]====]}
     local models={Chariot={'prop_sign_road_01a','prop_sign_road_01b','prop_sign_road_02a','prop_rub_cage01a'},Cage={'prop_dog_cage_01'}}
     -- Nouveaux modeles : reutilisation stricte du script et du circuit Cage.
-    for _,name in ipairs({'prop_rub_wheel_02','prop_box_wood06a','prop_boxpile_08a','prop_elec_heater_01','prop_gas_pump_1c','prop_carrier_bag_01','prop_logpile_06b','v_corp_servercln2','v_ret_ml_shelfrk','prop_tshirt_stand_01','prop_tshirt_stand_01b','prop_tshirt_stand_02','prop_tshirt_stand_04','v_ret_ml_liqshelfb','prop_rock_3_d','v_corp_potplant1','v_corp_potplant2','prop_pot_rack','apa_mp_h_lit_floorlamp_10','v_res_fh_sculptmod','apa_mp_h_tab_coffee_05','prop_tv_stand_01','prop_haybale_03','v_ret_ml_liqshelfd','prop_tablesaw_01','v_ret_ml_liqshelfa','v_ret_247_sweetcount','prop_t_coffe_table','prop_egg_clock_01','prop_rock_4_cl_1','prop_rub_table_02','prop_t_coffe_table_02','prop_patio_lounger1','prop_patio_lounger1b','apa_mp_h_floorlamp_a','prop_paints_bench01','apa_mp_h_lit_floorlamp_13','prop_table_08','prop_table_08_side','prop_feeder1','prop_feeder1_cr','prop_paint_stepl01','v_res_mbdresser','apa_mp_h_acc_plant_palm_01','v_res_tre_tree','v_res_mdchest_moved','v_ret_ml_liqshelfc','prop_muscle_bench_05','v_res_fh_benchshort','apa_mp_h_lit_floorlamp_06','v_ret_247shelves01','v_ret_247shelves03','v_ret_247shelves02','v_ret_247shelves04','v_ret_247shelves05','prop_phonebox_03','v_ret_ml_partframe1','v_res_lest_bigscreen','v_res_m_console','v_res_m_h_console','v_res_m_urn','apa_mp_h_str_shelfwallm_01','apa_p_apdlc_treadmill_s','v_ret_windowair','prop_pot_plant_05c','prop_paint_stepl01b','v_ret_wind2','v_ret_window','prop_t_shirt_row_01','prop_pot_plant_05a','prop_tv_flat_01_screen','prop_rock_2_a','prop_beach_parasol_03','v_ret_csr_tyresale','prop_fib_plant_02','prop_trailer_door_closed','prop_trailer_door_open','v_corp_plants','apa_mp_h_str_sideboards_01','v_res_d_sofa','v_ret_ps_flowers_02','prop_coffin_02','prop_coffin_02b','prop_speaker_01','prop_haybale_02','bkr_prop_weed_table_01b','v_ret_ml_tableb','v_ret_ml_tablec','prop_skid_box_02','v_ret_ml_tablea','prop_train_ticket_02','prop_train_ticket_02_tu','prop_rock_3_f','prop_tshirt_shelf_2a','prop_tshirt_shelf_2b','prop_tshirt_shelf_2c','prop_rock_4_a','prop_dog_cage_01','v_res_tre_plant','prop_pizza_oven_01','prop_table_02','prop_couch_lg_02','prop_t_shirt_row_05l','v_ret_ml_liqshelfe','prop_coffin_01','prop_beach_parasol_08','prop_t_shirt_row_05r','prop_wall_light_12','v_res_tre_sofa','v_res_tre_sofa_mess_c','v_res_tre_sofa_s','v_tre_sofa_mess_c_s','apa_mp_h_stn_sofa_daybed_01','v_res_tre_sofa_mess_b','v_tre_sofa_mess_b_s','prop_skid_tent_cloth','prop_big_clock_01','apa_mp_h_lit_floorlamp_01','apa_mp_h_bathtub_01','prop_dandy_b','prop_rock_3_j','prop_bench_01b','prop_bench_01c','v_ret_ml_fridge','prop_studio_light_01','prop_bush_ivy_01_top','prop_bush_ivy_02_top','prop_couch_sm_06','prop_barbell_100kg','prop_barbell_10kg','prop_barbell_20kg','prop_barbell_30kg','prop_barbell_40kg','prop_barbell_50kg','prop_barbell_60kg','prop_barbell_80kg','prop_weight_bench_02','prop_id2_20_clock','prop_beach_lg_stretch','v_res_tre_wdunitscuz','v_res_tre_woodunit','apa_prop_heist_cutscene_doorb','prop_airhockey_01','v_res_tre_wardrobe','prop_pot_plant_bh1','prop_barbell_02','v_ret_fh_displayc','prop_couch_01','prop_bench_04','prop_sglasses_stand_01','prop_bush_med_01','prop_weight_squat','prop_skid_tent_01b','prop_couch_lg_05','v_res_mdbed','v_ret_gs_glass01','apa_prop_heist_cutscene_doora','prop_premier_fence_01','prop_windmill1','prop_bball_arcade_01','apa_v_ilev_fh_heistdoor2','prop_tv_flat_01','apa_v_ilev_ss_door2','apa_v_ilev_ss_door7','apa_v_ilev_ss_door8','prop_door_01','v_corp_hicksdoor','apa_heist_apart2_door','apa_prop_hei_bankdoor_new','prop_strip_door_01','prop_chem_grill','prop_pot_plant_05b','prop_aerial_01c','prop_beach_parasol_02','prop_parasol_04e','prop_parasol_bh_48','apa_mp_h_acc_artwalll_01','apa_mp_h_acc_artwalll_02','apa_mp_h_acc_artwalll_03','apa_p_h_acc_artwalll_01','apa_p_h_acc_artwalll_02','apa_p_h_acc_artwalll_03','apa_p_h_acc_artwalll_04','sf_p_h_acc_artwalll_04','sum_p_h_acc_artwalll_04','v_res_fridgemoda','prop_carcreeper','prop_arcade_02','apa_mp_h_stn_sofa2seat_02','prop_sglasses_stand_1b','v_res_d_closetdoorl','v_res_d_closetdoorr','v_res_mddresser','v_res_mddresser_off','v_res_m_sidetable','v_res_mbath','prop_beach_parasol_04','prop_beach_parasol_09','prop_bench_02','prop_worklight_04b_l1','prop_bench_01a','prop_beach_parasol_01','prop_chall_lamp_01','prop_chall_lamp_01n','prop_muscle_bench_04','prop_rock_1_e','v_ret_fh_doorframe','v_res_j_sofa','prop_road_memorial_01','prop_pot_plant_04a','prop_punch_bag_l','prop_rock_2_f','prop_ff_shelves_01','prop_hot_tub_coverd','prop_hottub2','v_serv_cupboard_01','prop_surf_board_02','prop_surf_board_03','prop_surf_board_ldn_02','prop_surf_board_ldn_03','prop_skid_tent_01','prop_fridge_01','prop_pighouse2','v_serv_gt_glass1','prop_umpire_01','v_res_fh_floorlamp','v_res_mbbed','v_res_mbbed_mess','prop_patio_heater_01','prop_kino_light_01','prop_a_base_bars_01','prop_beach_bars_02','prop_wall_light_09d','prop_skid_tent_03','prop_p_spider_01d','prop_ff_counter_02','prop_ff_counter_03','prop_p_spider_01a','prop_wall_light_09a','v_corp_cabshelves01','v_corp_offshelf','v_corp_offshelfclo','v_corp_offshelfdark','v_res_tt_sofa','v_corp_lidesk01','v_corp_maindesk','v_corp_maindeskfd','v_corp_officedesk','v_corp_officedesk_5','v_corp_officedesk004','v_corp_officedesk2','prop_generator_02a','v_corp_divide','prop_pot_plant_02c','prop_rock_3_e','prop_log_ab','v_corp_officedesk003','v_corp_officedesk1','prop_windowbox_b','apa_v_ilev_fh_bedrmdoor','apa_v_ilev_fh_heistdoor1','prop_bleachers_01','v_res_fh_coftbldisp','v_corp_deskseta','v_corp_desksetb','prop_gascage01','prop_old_farm_02','prop_studio_light_02','prop_garden_edging_02','prop_phonebox_04','v_ret_hd_hooks_','prop_wall_light_15a','v_corp_servercln','v_corp_servers1','v_corp_servers2','prop_armenian_gate','prop_bench_11','prop_cork_board','prop_muster_wboard_01','prop_muster_wboard_02','prop_w_board_blank','prop_w_board_blank_2','prop_premier_fence_02','apa_mp_h_str_sideboardm_02','prop_b_board_blank','prop_surf_board_04','prop_surf_board_ldn_04','prop_table_para_comb_05','v_ret_247_win1','prop_bench_09','v_corp_partitionfd','v_ret_gs_glass02','prop_parasol_04d','prop_parasol_04b','prop_table_para_comb_02','apa_mp_h_str_sideboardm_03','prop_parasol_04c','gr_prop_bunker_bed_01','apa_mp_h_lit_floorlamp_05','apa_mp_h_lit_floorlampnight_05','v_res_tre_bed2','prop_parasol_04','v_res_tt_bed','prop_potatodigger','v_corp_cubiclefd','v_res_lestersbed','v_res_msonbed','v_res_msonbed_s','prop_log_aa','v_corp_post_open','v_corp_postbox','v_corp_postboxa','prop_rock_1_f','prop_bikerack_2','v_res_m_sinkunit','prop_kino_light_02','prop_kayak_01','prop_kayak_01b','v_res_tre_bed1','v_res_tre_bed1_messy','prop_cup_saucer_01','prop_surf_board_01','prop_surf_board_ldn_01','prop_table_tennis','prop_bandsaw_01','prop_bush_dead_02','v_res_tre_sofa_mess_a','v_tre_sofa_mess_a_s','apa_mp_h_bed_double_08','prop_rock_3_b','prop_worklight_04b','prop_bush_med_05','v_res_m_h_sofa_sml','prop_shelves_01','prop_shelves_02','prop_bench_05','prop_shelves_03','prop_bench_07','v_res_d_bed','prop_fishing_rod_01','prop_fishing_rod_02','prop_log_ac','v_ret_fh_doorfrmwide','prop_pot_plant_04c','v_ret_fh_shelf_01','v_ret_fh_shelf_02','v_ret_fh_shelf_03','v_ret_fh_shelf_04','prop_pot_plant_02d','prop_xmas_tree_int','apa_mp_h_bed_double_09','v_res_picture_frame','prop_creosote_b_01','apa_mp_h_bed_wide_05','v_ret_tat2stuff_06','prop_rock_2_g','prop_garden_edging_01','prop_couch_lg_07','prop_bush_med_07','apa_mp_h_str_shelffloorm_02','prop_pot_plant_01c','v_ret_tat2stuff_07','prop_bush_ivy_01_1m','prop_bush_ivy_02_1m','prop_couch_03','prop_parasol_01_down','prop_bench_06','prop_rock_1_d','v_ret_ml_win4','apa_prop_ss1_mpint_door_l','apa_prop_ss1_mpint_door_r','prop_hunterhide','v_ret_ml_win5','prop_couch_04','prop_couch_lg_08','apa_mp_h_acc_rugwools_01','apa_mp_h_acc_rugwools_03','prop_fernba','prop_table_para_comb_01','apa_mp_h_str_avunits_01','prop_bench_10','prop_beach_dip_bars_01','prop_beach_dip_bars_02','prop_strip_pole_01','prop_glass_panel_07','prop_beach_punchbag','apa_mp_h_acc_plant_tall_01','prop_log_ae','prop_couch_lg_06','v_res_fh_sidebrddine','prop_worklight_03a','v_corp_servrtwrfd','v_corp_srvrrackfd','v_corp_srvrtwrsfd','prop_poolskimmer','prop_cont_chiller_01','prop_pot_plant_03a','prop_pot_plant_inter_03a','prop_worklight_03b','prop_burgerstand_01','prop_pooltable_02','prop_pooltable_3b','prop_bush_med_06','apa_mp_h_str_avunits_04','v_ret_tat2stuff_05','prop_bush_med_03','prop_bush_med_03_cr','prop_bush_med_03_cr2','prop_bush_ivy_01_l','prop_bush_ivy_02_l','prop_gazebo_01','prop_bush_ivy_01_r','prop_bush_ivy_02_r','v_res_fh_benchlong','prop_pot_plant_03c','apa_mp_h_str_sideboardl_11','prop_bench_08','v_ret_fh_dinetable','v_res_mplanttongue','prop_movie_rack','v_res_cabinet','apa_mp_h_str_sideboardl_06','v_res_m_h_sofa','prop_homeles_shelter_02','apa_mp_h_str_sideboardl_09','prop_gazebo_02','v_res_r_sofa','prop_generator_04','prop_streetlight_12a','prop_homeles_shelter_01','apa_mp_h_str_sideboardl_13','prop_am_box_wood_01','prop_wait_bench_01','prop_glass_panel_06','prop_aerial_01b','prop_table_para_comb_03','v_res_fh_sidebrdlng','v_res_fh_sidebrdlngb','prop_bush_ornament_03','v_corp_bk_flag','prop_wall_light_11','prop_glass_panel_03','prop_spray_jackleg','prop_parasol_03','prop_mov_sechutwin','prop_parasol_03_b','v_corp_go_glass2','apa_mp_h_str_sideboardl_14','prop_owl_totem_01','prop_parasol_03_c','prop_oldplough1','apa_mp_h_din_table_04','prop_rock_4_big','prop_bush_ornament_02','v_ret_ml_methsweets','prop_beer_neon_01','prop_bush_ivy_01_bk','prop_aerial_01a','prop_studio_light_03','prop_hotdogstand_01','prop_log_ad','prop_bush_ivy_01_2m','prop_bush_ivy_02_2m','prop_rock_2_c','prop_rock_2_d','prop_bush_ornament_04','prop_rock_4_big2','prop_chickencoop_a','apa_mp_h_str_shelffreel_01','prop_beach_lg_surf','v_ret_tatstuff01','prop_cora_clam_01','prop_streetlight_12b','prop_table_para_comb_04','prop_bush_ornament_01','prop_rock_3_i','prop_food_van_01','prop_mov_sechutwin_02','v_corp_fib_glass_thin','v_corp_fib_glass1','prop_bush_ivy_01_pot','prop_bush_ivy_02_pot','prop_glass_panel_05','lts_prop_lts_offroad_tyres01','prop_juicestand','v_res_wall_cornertop','v_corp_conftable2','v_corp_conftable3','apa_mp_h_din_table_06','prop_parasol_01_c','apa_prop_flag_france','apa_prop_flag_ireland','apa_mp_h_din_table_01','v_res_fh_diningtable','prop_offroad_bale02','prop_offroad_bale03','prop_ven_shop_1_counter','prop_parasol_01_b','prop_parasol_01','apa_mp_h_din_table_05','apa_mp_h_din_table_11','prop_generator_03a','prop_chip_fryer','prop_food_van_02','v_ret_gassweetcount','prop_grain_hopper','prop_offroad_tyres01','prop_bleachers_03','prop_parking_hut_2','prop_parking_hut_2b','prop_streetlight_11a','prop_road_memorial_02','v_res_msoncabinet','prop_busstop_05','prop_plough','v_res_wall','prop_offroad_tyres01_tu','prop_rock_3_h','apa_mp_h_bed_with_table_02','prop_rock_1_c','prop_bleachers_04','prop_bleachers_04_cr','prop_pier_kiosk_01','prop_pier_kiosk_02','prop_pier_kiosk_03','prop_basketball_net','v_ret_gc_bootdisp','prop_pot_plant_01b','prop_pot_plant_03b','prop_pot_plant_03b_cr2','prop_gazebo_03','prop_streetlight_07a','prop_streetlight_07b','prop_sprayer','prop_log_01','apa_mp_h_str_avunitm_01','apa_mp_h_str_avunitm_03','prop_front_seat_row_01','v_res_son_desk','prop_streetlight_08','prop_log_af','prop_streetlight_15a','prop_hotel_clock_01','v_res_m_bananaplant','prop_rock_1_a','prop_warehseshelf03','prop_beach_bars_01','prop_pile_dirt_06','apa_mp_h_acc_rugwoolm_01','apa_mp_h_acc_rugwoolm_02','apa_mp_h_acc_rugwoolm_03','apa_mp_h_acc_rugwoolm_04','prop_oldlight_01a','v_corp_bk_balustrade','prop_generator_03b','apa_mp_h_stn_sofacorn_01','prop_rock_1_b','apa_mp_h_bed_table_wide_12','apa_mp_h_stn_sofacorn_08','apa_mp_h_stn_sofacorn_09','apa_mp_h_stn_sofacorn_07','apa_mp_h_stn_sofacorn_06','prop_pile_dirt_02','prop_parasol_02_b','prop_parasol_02_c','prop_parasol_02','apa_mp_h_stn_sofacorn_05','prop_can_canoe','apa_mp_h_stn_sofacorn_10','v_res_m_palmstairs','prop_set_generator_01','prop_set_generator_01_cr','prop_p_spider_01c','prop_parasol_05','prop_streetlight_09','prop_side_spreader','prop_bleachers_05','prop_bleachers_05_cr','prop_busstop_02','prop_bleachers_02','prop_ind_light_04','v_res_fh_sofa','v_res_mp_sofa'}) do
+    for _,name in ipairs({'prop_rub_wheel_02','prop_box_wood06a','prop_boxpile_08a','prop_elec_heater_01','prop_gas_pump_1c','prop_carrier_bag_01','prop_logpile_06b','v_corp_servercln2','v_ret_ml_shelfrk','prop_tshirt_stand_01','prop_tshirt_stand_01b','prop_tshirt_stand_02','prop_tshirt_stand_04','v_ret_ml_liqshelfb','prop_rock_3_d','v_corp_potplant1','v_corp_potplant2','prop_pot_rack','apa_mp_h_lit_floorlamp_10','v_res_fh_sculptmod','apa_mp_h_tab_coffee_05','prop_tv_stand_01','prop_haybale_03','v_ret_ml_liqshelfd','prop_tablesaw_01','v_ret_ml_liqshelfa','v_ret_247_sweetcount','prop_t_coffe_table','prop_egg_clock_01','prop_rock_4_cl_1','prop_rub_table_02','prop_t_coffe_table_02','prop_patio_lounger1','prop_patio_lounger1b','apa_mp_h_floorlamp_a','prop_paints_bench01','apa_mp_h_lit_floorlamp_13','prop_table_08','prop_table_08_side','prop_feeder1','prop_feeder1_cr','prop_paint_stepl01','v_res_mbdresser','apa_mp_h_acc_plant_palm_01','v_res_tre_tree','v_res_mdchest_moved','v_ret_ml_liqshelfc','prop_muscle_bench_05','v_res_fh_benchshort','apa_mp_h_lit_floorlamp_06','v_ret_247shelves01','v_ret_247shelves03','v_ret_247shelves02','v_ret_247shelves04','v_ret_247shelves05','prop_phonebox_03','v_ret_ml_partframe1','v_res_lest_bigscreen','v_res_m_console','v_res_m_h_console','v_res_m_urn','apa_mp_h_str_shelfwallm_01','apa_p_apdlc_treadmill_s','v_ret_windowair','prop_pot_plant_05c','prop_paint_stepl01b','v_ret_wind2','v_ret_window','prop_t_shirt_row_01','prop_pot_plant_05a','prop_tv_flat_01_screen','prop_rock_2_a','prop_beach_parasol_03','v_ret_csr_tyresale','prop_fib_plant_02','prop_trailer_door_closed','prop_trailer_door_open','v_corp_plants','apa_mp_h_str_sideboards_01','v_res_d_sofa','v_ret_ps_flowers_02','prop_coffin_02','prop_coffin_02b','prop_speaker_01','prop_haybale_02','bkr_prop_weed_table_01b','v_ret_ml_tableb','v_ret_ml_tablec','prop_skid_box_02','v_ret_ml_tablea','prop_train_ticket_02','prop_train_ticket_02_tu','prop_rock_3_f','prop_tshirt_shelf_2a','prop_tshirt_shelf_2b','prop_tshirt_shelf_2c','prop_rock_4_a','prop_dog_cage_01','v_res_tre_plant','prop_pizza_oven_01','prop_table_02','prop_couch_lg_02','prop_t_shirt_row_05l','v_ret_ml_liqshelfe','prop_coffin_01','prop_beach_parasol_08','prop_t_shirt_row_05r','prop_wall_light_12','v_res_tre_sofa','v_res_tre_sofa_mess_c','v_res_tre_sofa_s','v_tre_sofa_mess_c_s','apa_mp_h_stn_sofa_daybed_01','v_res_tre_sofa_mess_b','v_tre_sofa_mess_b_s','prop_skid_tent_cloth','prop_big_clock_01','apa_mp_h_lit_floorlamp_01','apa_mp_h_bathtub_01','prop_dandy_b','prop_rock_3_j','prop_bench_01b','prop_bench_01c','v_ret_ml_fridge','prop_studio_light_01','prop_bush_ivy_01_top','prop_bush_ivy_02_top','prop_couch_sm_06','prop_barbell_100kg','prop_barbell_10kg','prop_barbell_20kg','prop_barbell_30kg','prop_barbell_40kg','prop_barbell_50kg','prop_barbell_60kg','prop_barbell_80kg','prop_weight_bench_02','prop_id2_20_clock','prop_beach_lg_stretch','v_res_tre_wdunitscuz','v_res_tre_woodunit','apa_prop_heist_cutscene_doorb','prop_airhockey_01','v_res_tre_wardrobe','prop_pot_plant_bh1','prop_barbell_02','v_ret_fh_displayc','prop_couch_01','prop_bench_04','prop_sglasses_stand_01','prop_bush_med_01','prop_weight_squat','prop_skid_tent_01b','prop_couch_lg_05','v_res_mdbed','v_ret_gs_glass01','apa_prop_heist_cutscene_doora','prop_premier_fence_01','prop_windmill1','prop_bball_arcade_01','apa_v_ilev_fh_heistdoor2','prop_tv_flat_01','apa_v_ilev_ss_door2','apa_v_ilev_ss_door7','apa_v_ilev_ss_door8','prop_door_01','v_corp_hicksdoor','apa_heist_apart2_door','apa_prop_hei_bankdoor_new','prop_strip_door_01','prop_chem_grill','prop_pot_plant_05b','prop_aerial_01c','prop_beach_parasol_02','prop_parasol_04e','prop_parasol_bh_48','apa_mp_h_acc_artwalll_01','apa_mp_h_acc_artwalll_02','apa_mp_h_acc_artwalll_03','apa_p_h_acc_artwalll_01','apa_p_h_acc_artwalll_02','apa_p_h_acc_artwalll_03','apa_p_h_acc_artwalll_04','sf_p_h_acc_artwalll_04','sum_p_h_acc_artwalll_04','v_res_fridgemoda','prop_carcreeper','prop_arcade_02','apa_mp_h_stn_sofa2seat_02','prop_sglasses_stand_1b','v_res_d_closetdoorl','v_res_d_closetdoorr','v_res_mddresser','v_res_mddresser_off','v_res_m_sidetable','v_res_mbath','prop_beach_parasol_04','prop_beach_parasol_09','prop_bench_02','prop_worklight_04b_l1','prop_bench_01a','prop_beach_parasol_01','prop_chall_lamp_01','prop_chall_lamp_01n','prop_muscle_bench_04','prop_rock_1_e','v_ret_fh_doorframe','v_res_j_sofa','prop_road_memorial_01','prop_pot_plant_04a','prop_punch_bag_l','prop_rock_2_f','prop_ff_shelves_01','prop_hot_tub_coverd','prop_hottub2','v_serv_cupboard_01','prop_surf_board_02','prop_surf_board_03','prop_surf_board_ldn_02','prop_surf_board_ldn_03','prop_skid_tent_01','prop_fridge_01','prop_pighouse2','v_serv_gt_glass1','prop_umpire_01','v_res_fh_floorlamp','v_res_mbbed','v_res_mbbed_mess','prop_patio_heater_01','prop_kino_light_01','prop_a_base_bars_01','prop_beach_bars_02','prop_wall_light_09d','prop_skid_tent_03','prop_p_spider_01d','prop_ff_counter_02','prop_ff_counter_03','prop_p_spider_01a','prop_wall_light_09a','v_corp_cabshelves01','v_corp_offshelf','v_corp_offshelfclo'}) do
         models[name]={name}
     end
     local function enqueue(mode,point)
@@ -24011,8 +23896,10 @@ function ExecuteMenuAction(menu, index, listOverride)
             ShowDynastyNotification("[ NOCLIP ] ← → pose")
         elseif index == 3 then
             Menu.Actions.ToggleSlide()
-        -- index 4 = separator "Freecam", skipped
-        elseif index == 5 then
+        elseif index == 4 then
+            Menu.Actions.TpWay()
+        -- index 5 = separator "Freecam", skipped
+        elseif index == 6 then
             if freecam_active then
                 StopFreecam()
                 ShowDynastyNotification("Freecam: OFF")
@@ -24021,13 +23908,13 @@ function ExecuteMenuAction(menu, index, listOverride)
                 ShowDynastyNotification("Freecam: ON")
                 Menu.State.menuOpen = false
             end
-        elseif index == 6 then
+        elseif index == 7 then
             -- Freecam Layout : Enter cycle aussi
             local count = #FREECAM_LAYOUTS
             _G.freecam_layout = ((_G.freecam_layout or 1) % count) + 1
             local layoutName = FREECAM_LAYOUTS[_G.freecam_layout].name
             ShowDynastyNotification("Layout: " .. layoutName)
-        elseif index == 7 then
+        elseif index == 8 then
             Menu.State.freecamInfoVisible = not (Menu.State.freecamInfoVisible ~= false)
             ShowDynastyNotification("Freecam Info: " .. (Menu.State.freecamInfoVisible and "ON (Visible)" or "OFF (Masque)"))
         end
@@ -24487,6 +24374,20 @@ function ExecuteMenuAction(menu, index, listOverride)
             ShowDynastyNotification("[ WEAPON ] Munitions max")
         elseif type(wdata) == "table" and wdata.type == "toggle" then
             local st = wdata.state
+            if st=="noSpreadActive" and type(SetWeaponAccuracySpread)~="function" then
+                ShowDynastyNotification("[ WEAPON ] No Spread indisponible")
+                return
+            end
+            if st=="noRecoilActive" and type(SetWeaponRecoilShakeAmplitude)~="function"
+                and type(SetGameplayCamRelativePitch)~="function" then
+                ShowDynastyNotification("[ WEAPON ] No Recoil indisponible")
+                return
+            end
+            if st=="noSpreadActive" or st=="noRecoilActive" then
+                print(("[MIRAGE WEAPON DIAG] %s spread=%s recoil=%s camera=%s weapon=%s")
+                    :format(st,type(SetWeaponAccuracySpread),type(SetWeaponRecoilShakeAmplitude),
+                        type(SetGameplayCamRelativePitch),tostring(GetSelectedPedWeapon(PlayerPedId()))))
+            end
             Menu.State[st] = not Menu.State[st]
             local on = Menu.State[st]
             ShowDynastyNotification("[ WEAPON ] " .. wdata.name .. ": " .. (on and "ON" or "OFF"))
@@ -25093,7 +24994,7 @@ function Menu.Actions.HandleHorizontalNavigation(dir)
           ShowDynastyNotification("[ NOCLIP ] Pose: " .. poseName .. activeStr)
           PlaySoundFrontend(-1, "NAV_LEFT_RIGHT", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
 
-    elseif Menu.State.currentMenu == "MOVEMENT" and Menu.State.selectedOption == 5 then
+    elseif Menu.State.currentMenu == "MOVEMENT" and Menu.State.selectedOption == 6 then
           -- Freecam Speed : toujours ajustable
           local _fcSpeeds = {0.1, 0.25, 0.5, 1.0, 2.0, 5.0}
           freeCamSpeedIdx = math.max(1, math.min(#_fcSpeeds, (freeCamSpeedIdx or 3) + dir))
@@ -25102,7 +25003,7 @@ function Menu.Actions.HandleHorizontalNavigation(dir)
           ShowDynastyNotification("Vitesse Freecam: " .. (_fcNames[freeCamSpeedIdx] or "1.0"))
           PlaySoundFrontend(-1, "NAV_LEFT_RIGHT", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
 
-    elseif Menu.State.currentMenu == "MOVEMENT" and Menu.State.selectedOption == 6 then
+    elseif Menu.State.currentMenu == "MOVEMENT" and Menu.State.selectedOption == 7 then
           -- Freecam Layout : gauche/droite cycle
           local count = #FREECAM_LAYOUTS
           _G.freecam_layout = ((_G.freecam_layout or 1) - 1 + dir + count) % count + 1
@@ -27957,15 +27858,17 @@ local CFG = {
     collisionTimeoutMs = 15000, -- temps maximal de chargement apres une teleportation
     returnTimeoutMs = 10000,    -- chargement du decor au retour si le TP est annule
     positionSettleMs = 1200,    -- actualisation de la position dans le gamemode
+    intermediatePauseMs = 250, -- laisser enregistrer le premier TP avant la destination
     arrival = 2.8,           -- interaction du serveur a moins de 4 metres
     noProgressMs = 60000,    -- absence de changement d'inventaire
-    restartDelayMs = 10000,
+    restartDelayMs = 10000, -- garde-fou entre actions d'un meme cycle
     settleMs = 1500,         -- laisser arriver les notifications de fin/inventaire
     items = {               -- completer ici si les noms d'items ont change
         -- extasy = { raw = "extasy", product = "extasy_pooch" },
     },
 }
 
+TriggerEvent("mirage:dynastyFarm:replace")
 local previous = _G.DynastyAutoFarm
 if previous and previous.unload then
     previous.unload()
@@ -28076,6 +27979,9 @@ function S.unload()
     S.loaded = false
     for _, handler in ipairs(S.handlers) do RemoveEventHandler(handler) end
 end
+S.handlers[#S.handlers + 1] = AddEventHandler("mirage:dynastyFarm:replace", function()
+    if S.loaded then S.unload() end
+end)
 
 local function validPoint(p)
     return p and type(p.x) == "number" and type(p.y) == "number"
@@ -28175,6 +28081,25 @@ local function navigate(route, stage)
     FreezeEntityPosition(ped, true)
     ClearPedTasks(ped)
     SetEntityVelocity(ped, 0.0, 0.0, 0.0)
+    -- Premier TP : position aleatoire sur la derniere partie du trajet.
+    local ratio = 0.70 + math.random() * 0.15
+    local dx, dy = target.x - origin.x, target.y - origin.y
+    local length = math.sqrt(dx * dx + dy * dy)
+    local lateral = (math.random() * 2.0 - 1.0) * 12.0
+    local sideX, sideY = 0.0, 0.0
+    if length > 0.1 then
+        sideX, sideY = -dy / length * lateral, dx / length * lateral
+    end
+    local middle = {
+        x = origin.x + dx * ratio + sideX,
+        y = origin.y + dy * ratio + sideY,
+        z = math.max(origin.z, target.z) + 40.0
+    }
+    RequestCollisionAtCoord(middle.x, middle.y, middle.z)
+    SetEntityCoordsNoOffset(ped, middle.x, middle.y, middle.z, false, false, true)
+    pause(CFG.intermediatePauseMs)
+    if not guard(route) then return false end
+    -- Second TP : point exact de l'etape, avec la verification existante.
     RequestCollisionAtCoord(target.x, target.y, target.z + 1.0)
     SetEntityCoordsNoOffset(ped, target.x, target.y, target.z + 1.0, false, false, true)
     -- Verifier le decor a destination apres une mise a jour du jeu.
@@ -28280,7 +28205,7 @@ end)
 
 local function start()
     if not S.loaded then return end
-    if S.active then stop("Farm arrete."); return end
+    if S.active then say("Farm deja actif; cycle en cours."); return end
     if S.busy then say("Arret en cours; attends une seconde."); return end
     S.active, S.busy = true, true
     Lapsus.CreateThread(function()
@@ -28302,12 +28227,19 @@ local function start()
                 local remainingRaw = count(route.raw)
                 if count(route.product) == 0 then error("Traitement sans produit fini reconnu.", 0) end
                 if not operate(route, "sell") then return end
+                -- Le brut non traite reste dans l'inventaire et sera repris au cycle suivant.
+                -- Ne pas arreter le worker apres une vente confirmee.
                 if remainingRaw > 0 then
-                    error("Produits vendus; il reste " .. remainingRaw .. " matieres premieres. Verifie les ingredients avant de relancer.", 0)
+                    say(("Vente terminee; %d brut restant pour le prochain cycle."):format(remainingRaw))
                 end
                 S.cycles = S.cycles + 1
-                say("Cycle termine : " .. S.cycles)
-                pause(500)
+                say("Cycle termine : " .. S.cycles .. "; prochain cycle en cours.")
+                S.status = "Cycle " .. (S.cycles + 1) .. " : preparation"
+                -- Le cycle suivant repart des la vente confirmee; le cooldown interne
+                -- reste applique aux actions serveur dans operate().
+                S.lastStart = now() - CFG.restartDelayMs
+                S.lastStop = now() - CFG.settleMs
+                pause(0)
             end
         end)
         -- Un ancien worker decharge ne doit jamais arreter une nouvelle instance.
@@ -28838,6 +28770,12 @@ function Menu.Helpers.BuildNuiSnapshot()
         local full = Menu.Helpers.GetFullListForMenu(menu) or {}
         for i, item in ipairs(full) do rows[i] = rowFor(item, i, menu, S) end
     end
+    if menu == "MOVEMENT" and not _G._mirageMovementSnapshotLogged then
+        _G._mirageMovementSnapshotLogged = true
+        print(("[MIRAGE NUI DIAG] Movement rows=%d; last=%s; spread=%s; recoil=%s")
+            :format(#rows, tostring(rows[#rows] and rows[#rows].label),
+                type(SetWeaponAccuracySpread), type(SetWeaponRecoilShakeAmplitude)))
+    end
     local tabs,active=tabsFor(menu,S)
     local banner=Menu.Banner and Menu.Banner.imageUrl or (base..'/assets/mirage-banner.png?v=21')
     if Menu.AvailableBanners and Menu.AvailableBanners[Menu.BannerIndex or 1] then
@@ -29131,7 +29069,13 @@ Citizen.CreateThread(function()
             if visible and (not wasVisible or context~=lastContext
                 or (valueRevision~=lastValueRevision and now-lastList>=40) or now-lastList>=200) then
                 local ok,snapshot=pcall(Menu.Helpers.BuildNuiSnapshot)
-                if ok then send('snapshot',snapshot) end
+                if ok then
+                    local accepted=send('snapshot',snapshot)
+                    if S.currentMenu=='MOVEMENT' and not _G._mirageMovementSendLogged then
+                        _G._mirageMovementSendLogged=true
+                        print('[MIRAGE NUI DIAG] snapshot sent='..tostring(accepted)..'; rows='..tostring(#snapshot.rows))
+                    end
+                end
                 lastContext=context;lastList=now;lastValueRevision=valueRevision
             end
             wasVisible=visible
