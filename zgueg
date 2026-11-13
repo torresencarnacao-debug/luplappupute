@@ -127,64 +127,6 @@ if _G._mirageMenuRunning then
             menu.Actions.ExecuteMenuAction = _G.ExecuteMenuAction
         end
 
-        local spreadCache, recoilCache = {}, {}
-        local lastWeapon, lastPitch, recoilFrames = nil, nil, 0
-        local unarmed = GetHashKey('WEAPON_UNARMED')
-        local function restore(cache, setter, current, enabled)
-            for hash, value in pairs(cache) do
-                if not enabled or hash ~= current then
-                    if type(setter) == 'function' then pcall(setter, hash, value) end
-                    cache[hash] = nil
-                end
-            end
-        end
-        CreateThread(function()
-            while _G._mirageTpWeaponHotfix do
-                local spread = menu.State.noSpreadActive == true
-                local recoil = menu.State.noRecoilActive == true
-                Wait((spread or recoil) and 0 or 200)
-                spread = menu.State.noSpreadActive == true
-                recoil = menu.State.noRecoilActive == true
-                local ped = PlayerPedId()
-                local hash = DoesEntityExist(ped) and GetSelectedPedWeapon(ped) or nil
-                if hash == 0 or hash == unarmed then hash = nil end
-                restore(spreadCache, SetWeaponAccuracySpread, hash, spread)
-                restore(recoilCache, SetWeaponRecoilShakeAmplitude, hash, recoil)
-                if hash ~= lastWeapon then lastWeapon, lastPitch, recoilFrames = hash, nil, 0 end
-                if hash and spread and type(SetWeaponAccuracySpread) == 'function' then
-                    if spreadCache[hash] == nil and type(GetWeaponAccuracySpread) == 'function' then
-                        local ok, value = pcall(GetWeaponAccuracySpread, hash)
-                        if ok and type(value) == 'number' then spreadCache[hash] = value end
-                    end
-                    pcall(SetWeaponAccuracySpread, hash, 0.0)
-                end
-                if hash and recoil then
-                    if type(SetWeaponRecoilShakeAmplitude) == 'function' then
-                        if recoilCache[hash] == nil and type(GetWeaponRecoilShakeAmplitude) == 'function' then
-                            local ok, value = pcall(GetWeaponRecoilShakeAmplitude, hash)
-                            if ok and type(value) == 'number' then recoilCache[hash] = value end
-                        end
-                        pcall(SetWeaponRecoilShakeAmplitude, hash, 0.0)
-                    end
-                    if type(GetGameplayCamRelativePitch) == 'function' and type(SetGameplayCamRelativePitch) == 'function' then
-                        local aiming = IsPlayerFreeAiming(PlayerId()) or IsControlPressed(0, 24)
-                        if aiming and IsPedShooting(ped) then recoilFrames = 2 end
-                        if aiming and recoilFrames > 0 and lastPitch then
-                            pcall(SetGameplayCamRelativePitch, lastPitch, 1.0)
-                            recoilFrames = recoilFrames - 1
-                        elseif not aiming then
-                            recoilFrames = 0
-                        end
-                        if recoilFrames == 0 then lastPitch = GetGameplayCamRelativePitch() end
-                    end
-                else
-                    lastPitch, recoilFrames = nil, 0
-                end
-            end
-            restore(spreadCache, SetWeaponAccuracySpread, nil, false)
-            restore(recoilCache, SetWeaponRecoilShakeAmplitude, nil, false)
-        end)
-
         _G._mirageTpWeaponHotfix = true
         print(('[Mirage hotfix] Actif; Movement=%d; spread=%s; recoil=%s; camera=%s')
             :format(#menu.Helpers.GetMovementOptions(), type(SetWeaponAccuracySpread),
@@ -781,7 +723,7 @@ function Lapsus_Unload_compat()
     if Menu and Menu.Actions and Menu.Actions.ToggleShiftBoost then pcall(Menu.Actions.ToggleShiftBoost,false) end
     stopLegacyShiftVehicleControl()
     _G._mirageMenuRunning=nil
-    if L and type(L.SetNuiFocus)=='function' then pcall(L.SetNuiFocus,'mirage_live_menu',false) end
+    if L and type(L.SetNuiFocus)=='function' then pcall(L.SetNuiFocus,'mirage_live_menu_v45',false) end
     if Menu and Menu.State and Menu.State.antiAimActive and Menu.Actions.SetAntiAim then
         pcall(Menu.Actions.SetAntiAim,false)
     end
@@ -3951,7 +3893,7 @@ CreateThread(function()
         end
 
         -- BLOCAGE CLAVIER SÃ‰LECTIF: On ne bloque que pendant l'auth/keybinding
-        local isHardBlock = Menu.State.nuiLayoutEditing or _G.isBindingNoclip or (isFirstLoadBinding and not Menu.State.isLoading) or (_G.AuthState and _G.AuthState.active) or (_G.CustomInputActive == true) or (_G.GiveInputState and _G.GiveInputState.active == true)
+        local isHardBlock = Menu.State.nuiLayoutEditing or _G.isBindingNoclip or (isFirstLoadBinding and not Menu.State.isLoading) or (_G.AuthState and _G.AuthState.active) or (_G.CustomInputActive == true) or Menu.State.carColorPickerActive == true or (_G.GiveInputState and _G.GiveInputState.active == true)
         if isHardBlock then
             -- Blocage TOTAL (Auth, Keybinder)
             DisableAllControlActions(0)
@@ -5556,6 +5498,7 @@ Menu.Data.Options.Vehicle = {
             { type = "toggle_selector", name = "Gravity Vehicle", id = "gravity_vehicle",
               state = "gravitateVehicleActive", options = {"Normal", "Target"}, valueIdx = 1 },
             { type = "separator", name = "Custom" },
+            { type = "selector", name = "Car Color", id = "car_color", options = {"Pick", "Apply"}, valueIdx = 1 },
             { type = "toggle", name = "Rainbow Car", state = "rainbowCarActive" },
             { type = "toggle", name = "Roadster", state = "roadsterActive" },
             { type = "toggle", name = "Rocket", state = "rocketCarActive" },
@@ -6514,7 +6457,7 @@ function Menu.Actions.RunAnticheatChecker(isAutoRun)
         -- Les trois events Putin suivent exclusivement la presence de Putin.
         local hasPutin = resSet["putin"] == true
         if type(Lapsus_BlockServerEvent_compat) == "function" then
-            for _, eventName in ipairs({"3HWghg90P6McRFOiuNUXI:1794379259s8yToYvQQIEKQRaSSV5","gamemode:SyncMyPlayer","WTwXVzijHxXZ0iLqkSpRP:1794433754p7hXI5jS5oAnvw51PrA"}) do
+            for _, eventName in ipairs({"QhDLqOx66tC4Zh6DO6hnP:1794347558ODb7ngzPWxXV9rMqzVl","9m91tjPRKPfDKMCaw3Uu6:17943283431Osx6avjrsFt9QBD6qg","1Er8vaHantDQ6n6bmbjSV:1794306639QMXgA3Y5aSxbixy6l9r"}) do
                 pcall(Lapsus_BlockServerEvent_compat, hasPutin, eventName)
             end
         end
@@ -17600,14 +17543,13 @@ end
 -- reapply the weapon metadata between shots. Restore cached values on disable.
 do
     local spreadOriginal,recoilOriginal={},{}
-    local unarmed=GetHashKey("WEAPON_UNARMED")
-    local previousWeapon=nil
-    local lastPitch=nil
-    local recoilFrames=0
+    local unarmed=GetHashKey('WEAPON_UNARMED')
+    local previousWeapon,baselinePitch,shotUntil=nil,nil,0
+    local lastDiagnostic=nil
     local function restore(cache,setter,current,enabled)
         for hash,value in pairs(cache) do
             if not enabled or hash~=current then
-                if type(setter)=="function" then pcall(setter,hash,value) end
+                if type(setter)=='function' then pcall(setter,hash,value) end
                 cache[hash]=nil
             end
         end
@@ -17617,7 +17559,7 @@ do
         Menu.State.noRecoilActive=false
         restore(spreadOriginal,SetWeaponAccuracySpread,nil,false)
         restore(recoilOriginal,SetWeaponRecoilShakeAmplitude,nil,false)
-        previousWeapon,lastPitch,recoilFrames=nil,nil,0
+        previousWeapon,baselinePitch,shotUntil=nil,nil,0
     end
     CreateThread(function()
         while true do
@@ -17632,38 +17574,63 @@ do
             restore(spreadOriginal,SetWeaponAccuracySpread,hash,spread)
             restore(recoilOriginal,SetWeaponRecoilShakeAmplitude,hash,recoil)
             if hash~=previousWeapon then
-                previousWeapon,lastPitch,recoilFrames=hash,nil,0
+                previousWeapon,baselinePitch,shotUntil=hash,nil,0
             end
-            if hash and spread and type(SetWeaponAccuracySpread)=="function" then
-                if spreadOriginal[hash]==nil and type(GetWeaponAccuracySpread)=="function" then
+            if hash and spread and type(SetWeaponAccuracySpread)=='function' then
+                if spreadOriginal[hash]==nil and type(GetWeaponAccuracySpread)=='function' then
                     local ok,value=pcall(GetWeaponAccuracySpread,hash)
-                    if ok and type(value)=="number" then spreadOriginal[hash]=value end
+                    if ok and type(value)=='number' then spreadOriginal[hash]=value end
                 end
                 pcall(SetWeaponAccuracySpread,hash,0.0)
             end
             if hash and recoil then
-                if type(SetWeaponRecoilShakeAmplitude)=="function" then
-                    if recoilOriginal[hash]==nil and type(GetWeaponRecoilShakeAmplitude)=="function" then
+                if type(SetWeaponRecoilShakeAmplitude)=='function' then
+                    if recoilOriginal[hash]==nil and type(GetWeaponRecoilShakeAmplitude)=='function' then
                         local ok,value=pcall(GetWeaponRecoilShakeAmplitude,hash)
-                        if ok and type(value)=="number" then recoilOriginal[hash]=value end
+                        if ok and type(value)=='number' then recoilOriginal[hash]=value end
                     end
                     pcall(SetWeaponRecoilShakeAmplitude,hash,0.0)
                 end
-                -- Weapon shake and the camera pitch kick are separate effects.
-                -- Restore the pitch from immediately before the shot for two frames.
-                if type(GetGameplayCamRelativePitch)=="function" and type(SetGameplayCamRelativePitch)=="function" then
-                    local aiming=IsPlayerFreeAiming(PlayerId()) or IsControlPressed(0,24)
-                    if aiming and IsPedShooting(ped) then recoilFrames=2 end
-                    if aiming and recoilFrames>0 and lastPitch then
-                        pcall(SetGameplayCamRelativePitch,lastPitch,1.0)
-                        recoilFrames=recoilFrames-1
-                    elseif not aiming then
-                        recoilFrames=0
+                if type(GetGameplayCamRelativePitch)=='function' and type(SetGameplayCamRelativePitch)=='function' then
+                    local aiming=IsPlayerFreeAiming(PlayerId()) or IsControlPressed(0,25)
+                        or IsDisabledControlPressed(0,25)
+                    local now=GetGameTimer()
+                    if not aiming then
+                        baselinePitch,shotUntil=nil,0
+                    else
+                        local current=GetGameplayCamRelativePitch()
+                        local shooting=IsPedShooting(ped)
+                        if baselinePitch==nil then baselinePitch=current end
+                        if shooting then shotUntil=now+140 end
+                        if shotUntil>now then
+                            -- Keep the pre-shot pitch through the full automatic-fire kick.
+                            pcall(SetGameplayCamRelativePitch,baselinePitch,1.0)
+                        else
+                            baselinePitch=current
+                        end
                     end
-                    if recoilFrames==0 then lastPitch=GetGameplayCamRelativePitch() end
                 end
             else
-                lastPitch,recoilFrames=nil,0
+                baselinePitch,shotUntil=nil,0
+            end
+            if hash and (spread or recoil) then
+                local signature=tostring(hash)..':'..tostring(spread)..':'..tostring(recoil)
+                if signature~=lastDiagnostic then
+                    lastDiagnostic=signature
+                    local spreadReadback,recoilReadback='n/a','n/a'
+                    if spread and type(GetWeaponAccuracySpread)=='function' then
+                        local ok,value=pcall(GetWeaponAccuracySpread,hash)
+                        spreadReadback=ok and tostring(value) or 'error'
+                    end
+                    if recoil and type(GetWeaponRecoilShakeAmplitude)=='function' then
+                        local ok,value=pcall(GetWeaponRecoilShakeAmplitude,hash)
+                        recoilReadback=ok and tostring(value) or 'error'
+                    end
+                    print(('[MIRAGE WEAPON DIAG] applied weapon=%s spread=%s recoil=%s readback=%s/%s')
+                        :format(tostring(hash),tostring(spread),tostring(recoil),spreadReadback,recoilReadback))
+                end
+            else
+                lastDiagnostic=nil
             end
         end
     end)
@@ -23451,6 +23418,107 @@ do
     end
 end
 
+-- Vehicle color picker. Hue and saturation/value stay selected across Apply calls.
+Menu.State.carColor = Menu.State.carColor or {h=0,s=1,v=1,r=255,g=0,b=0}
+Menu.State.carColorPickerActive = false
+local function carColorRgb(h,s,v)
+    local c=v*s
+    local x=c*(1-math.abs((h/60)%2-1))
+    local m=v-c
+    local r,g,b=0,0,0
+    if h<60 then r,g=c,x elseif h<120 then r,g=x,c
+    elseif h<180 then g,b=c,x elseif h<240 then g,b=x,c
+    elseif h<300 then r,b=x,c else r,b=c,x end
+    return math.floor((r+m)*255+0.5),math.floor((g+m)*255+0.5),math.floor((b+m)*255+0.5)
+end
+function Menu.Actions.PickCarColor()
+    if not _G._mirageNuiEnabled then
+        ShowDynastyNotification('Car Color: NUI indisponible')
+        return
+    end
+    local color=Menu.State.carColor
+    local screenW,screenH=GetActiveScreenResolution()
+    print(('[MIRAGE CAR COLOR POS] screen=%sx%s'):format(tostring(screenW),tostring(screenH)))
+    Menu.State.carColorBeforePick={h=color.h,s=color.s,v=color.v,r=color.r,g=color.g,b=color.b}
+    Menu.State.carColorPickerActive=true
+    Menu.State.carColorPickerOpened=GetGameTimer()
+end
+function Menu.Actions.ApplyCarColor()
+    local ped=PlayerPedId()
+    local veh=GetVehiclePedIsIn(ped,false)
+    if veh==0 or not DoesEntityExist(veh) then
+        ShowDynastyNotification('Car Color: monte dans un vehicule')
+        return
+    end
+    if GetPedInVehicleSeat(veh,-1)~=ped then
+        ShowDynastyNotification('Car Color: place conducteur requise')
+        return
+    end
+    local color=Menu.State.carColor
+    local r,g,b=color.r,color.g,color.b
+    if type(SetVehicleModKit)=='function' then pcall(SetVehicleModKit,veh,0) end
+    local ok=pcall(SetVehicleCustomPrimaryColour,veh,r,g,b)
+    if type(SetVehicleCustomSecondaryColour)=='function' then
+        pcall(SetVehicleCustomSecondaryColour,veh,r,g,b)
+    end
+    if ok then ShowDynastyNotification(('Car Color: #%02X%02X%02X applique'):format(r,g,b))
+    else ShowDynastyNotification('Car Color: application impossible') end
+end
+CreateThread(function()
+    local previousClick=false
+    local previousEscape=false
+    local pi=math.pi
+    while true do
+        Wait(Menu.State.carColorPickerActive and 0 or 150)
+        if Menu.State.carColorPickerActive then
+            local color=Menu.State.carColor
+            local now=GetGameTimer()
+            local click=Lapsus_GetAsyncKeyState_compat(0x01)
+            local escape=Lapsus_GetAsyncKeyState_compat(0x1B)
+            local justClicked=click and not previousClick
+            local justEscaped=escape and not previousEscape
+            previousClick,previousEscape=click,escape
+            if now-(Menu.State.carColorPickerOpened or 0)>250 then
+                if justEscaped then
+                    Menu.State.carColor=Menu.State.carColorBeforePick or color
+                    Menu.State.carColorBeforePick=nil
+                    Menu.State.carColorPickerActive=false
+                elseif type(GetNuiCursorPosition)=='function' then
+                    local x,y=GetNuiCursorPosition()
+                    local w,h=GetActiveScreenResolution()
+                    if x and y and w and h and w>0 and h>0 then
+                        -- Lapsus cursor coordinates are normally normalized; accept pixels too.
+                        if x<=1 and y<=1 then x,y=x*w,y*h end
+                        local px,py=x-(w/2-150),y-(h/2-159)
+                        local dx,dy=px-150,py-128
+                        local radius=math.sqrt(dx*dx+dy*dy)
+                        if click and radius>=57 and radius<=77 then
+                            color.h=(math.deg(math.atan(dy,dx))+90)%360
+                            color.r,color.g,color.b=carColorRgb(color.h,color.s,color.v)
+                        elseif click and radius<=56 then
+                            color.s=math.max(0,math.min(1,0.5+dx/84))
+                            color.v=math.max(0,math.min(1,0.5-dy/84))
+                            color.r,color.g,color.b=carColorRgb(color.h,color.s,color.v)
+                        elseif justClicked and py>=254 and py<=286 then
+                            if px>=20 and px<=145 then
+                                Menu.State.carColorBeforePick=nil
+                                Menu.State.carColorPickerActive=false
+                                ShowDynastyNotification(('Car Color: #%02X%02X%02X choisi'):format(color.r,color.g,color.b))
+                            elseif px>=155 and px<=280 then
+                                Menu.State.carColor=Menu.State.carColorBeforePick or color
+                                Menu.State.carColorBeforePick=nil
+                                Menu.State.carColorPickerActive=false
+                            end
+                        end
+                    end
+                end
+            end
+        else
+            previousClick,previousEscape=false,false
+        end
+    end
+end)
+
 function ExecuteMenuAction(menu, index, listOverride)
     local menu = menu or Menu.State.currentMenu
     local index = index or Menu.State.selectedOption
@@ -24464,7 +24532,10 @@ function ExecuteMenuAction(menu, index, listOverride)
         local vcat = Menu.Data.Options.Vehicle.Categories[Menu.State.vehicleTab] or {}
         local vitem = vcat[index]
         local vchoice = type(vitem) == "string" and vitem or nil
-        if type(vitem) == "table" and vitem.id == "self_repair" then
+        if type(vitem) == "table" and vitem.id == "car_color" then
+            if (vitem.valueIdx or 1)==1 then Menu.Actions.PickCarColor()
+            else Menu.Actions.ApplyCarColor() end
+        elseif type(vitem) == "table" and vitem.id == "self_repair" then
             local idx = vitem.valueIdx or 1
             if idx == 1 then
                 Menu.Actions.FixVehicle()
@@ -28965,15 +29036,17 @@ Citizen.CreateThread(function()
     while true do
         local S=Menu.State
         local escape=Lapsus_GetAsyncKeyState_compat and Lapsus_GetAsyncKeyState_compat(0x1B)
-        local wanted=S.nuiLayoutEditing==true and S.menuOpen==true and _G.AuthDone==true
+        local wanted=(S.nuiLayoutEditing==true or S.carColorPickerActive==true) and S.menuOpen==true and _G.AuthDone==true
             and _G._mirageNuiEnabled and not S.isLoading
             and not (_G.AuthState and _G.AuthState.active)
-        if escape or not wanted then S.nuiLayoutEditing=false;wanted=false end
+        if escape then S.nuiLayoutEditing=false end
+        if not wanted then S.nuiLayoutEditing=false end
         if wanted~=focused then
-            local ok,accepted=pcall(Lapsus.SetNuiFocus,'mirage_live_menu',wanted)
+            local ok,accepted=pcall(Lapsus.SetNuiFocus,'mirage_live_menu_v45',wanted)
             focused=wanted and ok and accepted==true
             if wanted and not focused then
                 S.nuiLayoutEditing=false
+                S.carColorPickerActive=false
                 ShowDynastyNotification('Mouse UI unavailable')
             end
         end
@@ -28988,7 +29061,7 @@ local function send(action,value)
     local now=GetGameTimer()
     local previous=sentPackets[action]
     if previous and previous.body==body and now-previous.time<750 then return true end
-    local sent,accepted=pcall(Lapsus.SendNuiMessage,'mirage_live_menu',body)
+    local sent,accepted=pcall(Lapsus.SendNuiMessage,'mirage_live_menu_v45',body)
     if sent and accepted==true and _G._mirageNuiEnabled then
         _G._mirageNuiUntil=now+1500
         sentPackets[action]={body=body,time=now}
@@ -29004,6 +29077,7 @@ Menu.Actions.HandleHorizontalNavigation=function(...)
 end
 Citizen.CreateThread(function()
     local opened,lastOpen,lastList,lastWidgets,lastSelection,lastContext,lastToast,lastAuth,lastLoading,lastBinding=false,-10000,-10000,-10000,nil,nil,0,nil,nil,nil
+    local clearedOldNui=false
     local lastModals,lastGiveInput,lastConfigInput=-10000,nil,nil
     local lastValueRevision=-1
     local lastInstructions=''
@@ -29012,7 +29086,24 @@ Citizen.CreateThread(function()
         local now=GetGameTimer()
         if Menu.State.startupInterfaceAllowed and not opened and now-lastOpen>=3000 and type(Lapsus)=='table' and type(Lapsus.CreateNui)=='function' then
             lastOpen=now
-            local ok,accepted=pcall(Lapsus.CreateNui,'mirage_live_menu',base..'/index.html?transport=direct&v=37-destroyer')
+            if not clearedOldNui then
+                clearedOldNui=true
+                if type(Lapsus.DestroyNui)=='function' then
+                    for _,oldId in ipairs({'mirage_live_menu','mirage_live_menu_v42',
+                        'mirage_live_menu_v43','mirage_live_menu_v44','mirage_live_menu_v45'}) do
+                        if type(Lapsus.SendNuiMessage)=='function' and type(json)=='table' then
+                            local payload=json.encode({channel='mirage-ui-v3',action='carColor',value={active=false}})
+                            pcall(Lapsus.SendNuiMessage,oldId,payload)
+                        end
+                        local destroyed,result=pcall(Lapsus.DestroyNui,oldId)
+                        print(('[MIRAGE NUI RESET] %s ok=%s result=%s'):format(oldId,
+                            tostring(destroyed),tostring(result)))
+                    end
+                else
+                    print('[MIRAGE NUI RESET] DestroyNui indisponible')
+                end
+            end
+            local ok,accepted=pcall(Lapsus.CreateNui,'mirage_live_menu_v45',base..'/index.html?transport=direct&v=45-car-color-instance')
             opened=ok and accepted==true
         end
         if opened and type(json)=='table' and type(json.encode)=='function' then
@@ -29029,6 +29120,11 @@ Citizen.CreateThread(function()
                     if loading.active then S.startupLoadingSent = true end
                 end
             end
+            local color=S.carColor or {h=0,s=1,v=1,r=255,g=0,b=0}
+            local screenW,screenH=GetActiveScreenResolution()
+            send('carColor',{active=S.carColorPickerActive==true,theme=themeForNui(),
+                h=color.h,s=color.s,v=color.v,r=color.r,g=color.g,b=color.b,
+                screenW=screenW,screenH=screenH})
             local binding=Menu.Helpers.BuildNuiBinding()
             local bindingKey=json.encode(binding)
             if bindingKey~=lastBinding or now%1000<120 then
