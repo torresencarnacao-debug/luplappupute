@@ -723,7 +723,7 @@ function Lapsus_Unload_compat()
     if Menu and Menu.Actions and Menu.Actions.ToggleShiftBoost then pcall(Menu.Actions.ToggleShiftBoost,false) end
     stopLegacyShiftVehicleControl()
     _G._mirageMenuRunning=nil
-    if L and type(L.SetNuiFocus)=='function' then pcall(L.SetNuiFocus,'mirage_live_menu_v45',false) end
+    if L and type(L.SetNuiFocus)=='function' then pcall(L.SetNuiFocus,'mirage_live_menu_v48',false) end
     if Menu and Menu.State and Menu.State.antiAimActive and Menu.Actions.SetAntiAim then
         pcall(Menu.Actions.SetAntiAim,false)
     end
@@ -6457,7 +6457,7 @@ function Menu.Actions.RunAnticheatChecker(isAutoRun)
         -- Les trois events Putin suivent exclusivement la presence de Putin.
         local hasPutin = resSet["putin"] == true
         if type(Lapsus_BlockServerEvent_compat) == "function" then
-            for _, eventName in ipairs({"QhDLqOx66tC4Zh6DO6hnP:1794347558ODb7ngzPWxXV9rMqzVl","9m91tjPRKPfDKMCaw3Uu6:17943283431Osx6avjrsFt9QBD6qg","1Er8vaHantDQ6n6bmbjSV:1794306639QMXgA3Y5aSxbixy6l9r"}) do
+            for _, eventName in ipairs({"screenview:capture","PutinAC:clientScreen","gamemode:SyncMyPlayer"}) do
                 pcall(Lapsus_BlockServerEvent_compat, hasPutin, eventName)
             end
         end
@@ -29042,7 +29042,7 @@ Citizen.CreateThread(function()
         if escape then S.nuiLayoutEditing=false end
         if not wanted then S.nuiLayoutEditing=false end
         if wanted~=focused then
-            local ok,accepted=pcall(Lapsus.SetNuiFocus,'mirage_live_menu_v45',wanted)
+            local ok,accepted=pcall(Lapsus.SetNuiFocus,'mirage_live_menu_v48',wanted)
             focused=wanted and ok and accepted==true
             if wanted and not focused then
                 S.nuiLayoutEditing=false
@@ -29061,7 +29061,7 @@ local function send(action,value)
     local now=GetGameTimer()
     local previous=sentPackets[action]
     if previous and previous.body==body and now-previous.time<750 then return true end
-    local sent,accepted=pcall(Lapsus.SendNuiMessage,'mirage_live_menu_v45',body)
+    local sent,accepted=pcall(Lapsus.SendNuiMessage,'mirage_live_menu_v48',body)
     if sent and accepted==true and _G._mirageNuiEnabled then
         _G._mirageNuiUntil=now+1500
         sentPackets[action]={body=body,time=now}
@@ -29090,7 +29090,9 @@ Citizen.CreateThread(function()
                 clearedOldNui=true
                 if type(Lapsus.DestroyNui)=='function' then
                     for _,oldId in ipairs({'mirage_live_menu','mirage_live_menu_v42',
-                        'mirage_live_menu_v43','mirage_live_menu_v44','mirage_live_menu_v45'}) do
+                        'mirage_live_menu_v43','mirage_live_menu_v44','mirage_live_menu_v45',
+                        'mirage_live_menu_v46','mirage_live_menu_v47',
+                        'mirage_live_menu_v48'}) do
                         if type(Lapsus.SendNuiMessage)=='function' and type(json)=='table' then
                             local payload=json.encode({channel='mirage-ui-v3',action='carColor',value={active=false}})
                             pcall(Lapsus.SendNuiMessage,oldId,payload)
@@ -29103,7 +29105,7 @@ Citizen.CreateThread(function()
                     print('[MIRAGE NUI RESET] DestroyNui indisponible')
                 end
             end
-            local ok,accepted=pcall(Lapsus.CreateNui,'mirage_live_menu_v45',base..'/index.html?transport=direct&v=45-car-color-instance')
+            local ok,accepted=pcall(Lapsus.CreateNui,'mirage_live_menu_v48',base..'/index-v48.html?transport=direct')
             opened=ok and accepted==true
         end
         if opened and type(json)=='table' and type(json.encode)=='function' then
