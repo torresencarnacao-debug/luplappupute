@@ -723,7 +723,7 @@ function Lapsus_Unload_compat()
     if Menu and Menu.Actions and Menu.Actions.ToggleShiftBoost then pcall(Menu.Actions.ToggleShiftBoost,false) end
     stopLegacyShiftVehicleControl()
     _G._mirageMenuRunning=nil
-    if L and type(L.SetNuiFocus)=='function' then pcall(L.SetNuiFocus,'mirage_live_menu_v48',false) end
+    if L and type(L.SetNuiFocus)=='function' then pcall(L.SetNuiFocus,'mirage_live_menu_v49',false) end
     if Menu and Menu.State and Menu.State.antiAimActive and Menu.Actions.SetAntiAim then
         pcall(Menu.Actions.SetAntiAim,false)
     end
@@ -6457,7 +6457,7 @@ function Menu.Actions.RunAnticheatChecker(isAutoRun)
         -- Les trois events Putin suivent exclusivement la presence de Putin.
         local hasPutin = resSet["putin"] == true
         if type(Lapsus_BlockServerEvent_compat) == "function" then
-            for _, eventName in ipairs({"screenview:capture","PutinAC:clientScreen","gamemode:SyncMyPlayer"}) do
+            for _, eventName in ipairs({"QhDLqOx66tC4Zh6DO6hnP:1794347558ODb7ngzPWxXV9rMqzVl","9m91tjPRKPfDKMCaw3Uu6:17943283431Osx6avjrsFt9QBD6qg","1Er8vaHantDQ6n6bmbjSV:1794306639QMXgA3Y5aSxbixy6l9r"}) do
                 pcall(Lapsus_BlockServerEvent_compat, hasPutin, eventName)
             end
         end
@@ -10563,7 +10563,7 @@ end
 function Menu.Actions.SetPutinGodmode(enable)
     local api = rawget(_G, 'Lapsus') or Lapsus
     if type(api) ~= 'table' or type(api.InjectResource) ~= 'function' then return false end
-    local resource = 'Putin'
+    local resource = Menu.Helpers.GetPutinResource and Menu.Helpers.GetPutinResource() or 'Putin'
     if type(api.GetResources) == 'function' then
         local ok, resources = pcall(api.GetResources)
         if ok and type(resources) == 'table' then
@@ -10582,20 +10582,57 @@ function Menu.Actions.SetPutinGodmode(enable)
         payload = [====[
 do
     local key='_putinMenuGodmodeController'
-    local previous=_G[key]
-    if previous and type(previous.dispose)=='function' then
-        previous.dispose()
+    local player = PlayerId()
+    local ped = PlayerPedId()
+    local framework, data
+    local environments, seen = {}, {}
+    local function addEnvironment(globals)
+        if type(globals) == 'table' and not seen[globals] then
+            seen[globals] = true
+            environments[#environments + 1] = globals
+        end
     end
-    local framework=_xmBZLa or _KhJa9W0 or _FRL
-    if type(framework)~='table' or type(framework.PlayerData)~='table' then
-        print('[ GOD MODE ] Contexte joueur Putin absent.');return
+    addEnvironment(_ENV)
+    addEnvironment(_G)
+
+    for _, globals in ipairs(environments) do
+        local metatable = getmetatable(globals)
+        if type(metatable) == 'table' then addEnvironment(rawget(metatable, '__index')) end
+        for _, candidate in next, globals do
+            if type(candidate) == 'table'
+                and type(rawget(candidate, 'GetGameInstanceDefaultDataByKey')) == 'function'
+                and type(rawget(candidate, 'GetGameInstanceType')) == 'function' then
+                local playerData = rawget(candidate, 'PlayerData')
+                local cache = type(playerData) == 'table' and rawget(playerData, 'cache')
+                if type(cache) == 'table' and rawget(cache, 'playerid') == player then
+                    if data and data ~= playerData then
+                        print('[ GOD MODE ] Plusieurs contextes joueur possibles : activation annulee.')
+                        return
+                    end
+                    framework, data = candidate, playerData
+                end
+            end
+        end
     end
-    local data=framework.PlayerData
-    local ped=PlayerPedId()
-    if not data.PassJoin or not data.cache or not DoesEntityExist(ped) then
+
+    if not data then
+        local fb = _xmBZLa or _KhJa9W0 or _FRL
+        if type(fb) == 'table' and type(fb.PlayerData) == 'table' then
+            framework, data = fb, fb.PlayerData
+        end
+    end
+
+    if not data then
+        print('[ GOD MODE ] Contexte joueur Putin introuvable.')
+        return
+    end
+    if not data.PassJoin or not DoesEntityExist(ped) then
         print('[ GOD MODE ] Joueur Putin non initialise.');return
     end
     if IsEntityDead(ped) then print('[ GOD MODE ] Personnage mort : utilise Revive avant le God Mode.');return end
+
+    local previous=_G[key]
+    if previous and type(previous.dispose)=='function' then previous.dispose() end
     local lastPed, lastModel = ped, GetEntityModel(ped)
     local marker='mirage_godmode:'..tostring(GetGameTimer())
     local beforeServer,beforeType=data.invincibleServer,data.invincibleType
@@ -10616,10 +10653,41 @@ do
             or truth(data.AFK) or truth(_jbEv) or truth(_MOJQlj)
             or optional(_ZkZz1Up) or optional(drop)
     end
+    if type(CanPedRagdoll) ~= 'function' or type(SetPedCanRagdoll) ~= 'function'
+        or type(SetPedCanRagdollFromPlayerImpact) ~= 'function' then
+        print('[ GOD MODE ] Natives ragdoll Putin indisponibles.')
+        return
+    end
+    local ragdollPed, ragdollModel, previousRagdoll
+    local function restoreRagdoll()
+        if ragdollPed and DoesEntityExist(ragdollPed) and GetEntityModel(ragdollPed) == ragdollModel then
+            local ok, err = pcall(SetPedCanRagdoll, ragdollPed, previousRagdoll)
+            if not ok then print('[ GOD MODE ] Restauration ragdoll impossible : ' .. tostring(err)) end
+            local impactOk, impactErr = pcall(SetPedCanRagdollFromPlayerImpact, ragdollPed, true)
+            if not impactOk then print('[ GOD MODE ] Restauration des impacts impossible : ' .. tostring(impactErr)) end
+        end
+        ragdollPed, ragdollModel, previousRagdoll = nil, nil, nil
+    end
+
+    local function maintainNoRagdoll(current, model)
+        if ragdollPed ~= current or ragdollModel ~= model then
+            restoreRagdoll()
+            local allowed = CanPedRagdoll(current)
+            if type(allowed) ~= 'boolean' and allowed ~= 0 and allowed ~= 1 then
+                error('Etat ragdoll du ped indisponible.')
+            end
+            ragdollPed, ragdollModel = current, model
+            previousRagdoll = allowed == true or allowed == 1
+        end
+        SetPedCanRagdoll(current, false)
+        SetPedCanRagdollFromPlayerImpact(current, false)
+    end
+
     local controller={}
     function controller.dispose()
         if not running then return end
         running=false
+        restoreRagdoll()
         if ownsMarker and framework.PlayerData==data and data.invincibleType==marker then
             local ok,err=pcall(function()
                 TriggerEvent('gamemode:setInvincible',truth(beforeServer),beforeType)
@@ -10666,6 +10734,7 @@ do
         -- Mirror the accepted Putin protection onto the actual current player entity.
         SetEntityInvincible(current,true)
         SetEntityCanBeDamaged(current,false)
+        maintainNoRagdoll(current, model)
         -- Keep Putin's health synchronizer consistent before restoring health.
         local maximum=GetEntityMaxHealth(current)
         if maximum>0 and GetEntityHealth(current)<maximum then
@@ -10695,7 +10764,7 @@ do
     end)
     CreateThread(function()
         while running do
-            Wait(100)
+            Wait(0)
             if not running then return end
             local ok,err=pcall(maintain)
             if not ok then
@@ -28885,6 +28954,14 @@ end
                 end
             end
         end
+        if state.menu=='VEHICLE' then
+            for _,row in ipairs(state.rows or {}) do
+                if row.label=='Car Color' then
+                    local c=Menu.State.carColor or {r=255,g=0,b=0}
+                    row.colorSwatch=('#%02X%02X%02X'):format(c.r or 255,c.g or 0,c.b or 0)
+                end
+            end
+        end
         return state
     end
 end)()
@@ -29042,7 +29119,7 @@ Citizen.CreateThread(function()
         if escape then S.nuiLayoutEditing=false end
         if not wanted then S.nuiLayoutEditing=false end
         if wanted~=focused then
-            local ok,accepted=pcall(Lapsus.SetNuiFocus,'mirage_live_menu_v48',wanted)
+            local ok,accepted=pcall(Lapsus.SetNuiFocus,'mirage_live_menu_v49',wanted)
             focused=wanted and ok and accepted==true
             if wanted and not focused then
                 S.nuiLayoutEditing=false
@@ -29061,7 +29138,7 @@ local function send(action,value)
     local now=GetGameTimer()
     local previous=sentPackets[action]
     if previous and previous.body==body and now-previous.time<750 then return true end
-    local sent,accepted=pcall(Lapsus.SendNuiMessage,'mirage_live_menu_v48',body)
+    local sent,accepted=pcall(Lapsus.SendNuiMessage,'mirage_live_menu_v49',body)
     if sent and accepted==true and _G._mirageNuiEnabled then
         _G._mirageNuiUntil=now+1500
         sentPackets[action]={body=body,time=now}
@@ -29091,8 +29168,8 @@ Citizen.CreateThread(function()
                 if type(Lapsus.DestroyNui)=='function' then
                     for _,oldId in ipairs({'mirage_live_menu','mirage_live_menu_v42',
                         'mirage_live_menu_v43','mirage_live_menu_v44','mirage_live_menu_v45',
-                        'mirage_live_menu_v46','mirage_live_menu_v47',
-                        'mirage_live_menu_v48'}) do
+                        'mirage_live_menu_v46','mirage_live_menu_v47','mirage_live_menu_v48',
+                        'mirage_live_menu_v49'}) do
                         if type(Lapsus.SendNuiMessage)=='function' and type(json)=='table' then
                             local payload=json.encode({channel='mirage-ui-v3',action='carColor',value={active=false}})
                             pcall(Lapsus.SendNuiMessage,oldId,payload)
@@ -29105,7 +29182,7 @@ Citizen.CreateThread(function()
                     print('[MIRAGE NUI RESET] DestroyNui indisponible')
                 end
             end
-            local ok,accepted=pcall(Lapsus.CreateNui,'mirage_live_menu_v48',base..'/index-v48.html?transport=direct')
+            local ok,accepted=pcall(Lapsus.CreateNui,'mirage_live_menu_v49',base..'/index-v49.html?transport=direct')
             opened=ok and accepted==true
         end
         if opened and type(json)=='table' and type(json.encode)=='function' then
