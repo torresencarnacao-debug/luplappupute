@@ -1,6 +1,6 @@
 -- Renseigne le domaine public Railway, sans chemin.
 _G.MirageNuiBaseUrl = "https://nuirepo-production.up.railway.app"
-print('[MIRAGE SHIFT DIAG v1] fichier charge; deja actif='..tostring(_G._mirageMenuRunning==true))
+
 if not _G._mirageShiftDiagRunning then
     _G._mirageShiftDiagRunning=true
     CreateThread(function()
@@ -19,11 +19,7 @@ if not _G._mirageShiftDiagRunning then
                         bindCount=bindCount+1
                     end
                 end
-                print(('[MIRAGE SHIFT DIAG v1] gravity=%s mode=%s boost=%s rocket=%s roadster=%s easy=%s legacy=%s shiftBinds=%d')
-                    :format(tostring(state.gravitateVehicleActive),tostring(state.gravitateVehicleMode),
-                        tostring(state.shiftBoostActive),tostring(state.rocketCarActive),
-                        tostring(state.roadsterActive),tostring(state.easyHandlingActive),
-                        tostring(_G.PqLmYgZxWvTrHs),bindCount))
+                
                 _G._mirageShiftDiagRunning=false
                 return
             end
@@ -61,11 +57,11 @@ if _G._mirageMenuRunning then
         local menu = rawget(_G, 'Menu')
         if type(menu) ~= 'table' or type(menu.State) ~= 'table'
             or type(menu.Helpers) ~= 'table' or type(menu.Actions) ~= 'table' then
-            print('[Mirage hotfix] Menu actif introuvable. Charge lapsus_fixed.lua d abord.')
+            
             return
         end
         if _G._mirageTpWeaponHotfix then
-            print('[Mirage hotfix] Deja actif; Movement a ' .. #menu.Helpers.GetMovementOptions() .. ' lignes.')
+            
             return
         end
 
@@ -89,7 +85,7 @@ if _G._mirageMenuRunning then
         menu.Actions.TpWay = function()
             local blip = GetFirstBlipInfoId(8)
             if not blip or blip == 0 or not DoesBlipExist(blip) then
-                print('[Mirage hotfix] Place un waypoint.')
+                
                 return false
             end
             local target = GetBlipInfoIdCoord(blip)
@@ -104,11 +100,11 @@ if _G._mirageMenuRunning then
                 Wait(0)
             end
             if not found then
-                print('[Mirage hotfix] Sol non charge; TP annule.')
+                
                 return false
             end
             SetEntityCoordsNoOffset(entity, target.x, target.y, ground + 1.0, false, false, false)
-            print('[Mirage hotfix] TP Way effectue.')
+            
             return true
         end
 
@@ -128,9 +124,7 @@ if _G._mirageMenuRunning then
         end
 
         _G._mirageTpWeaponHotfix = true
-        print(('[Mirage hotfix] Actif; Movement=%d; spread=%s; recoil=%s; camera=%s')
-            :format(#menu.Helpers.GetMovementOptions(), type(SetWeaponAccuracySpread),
-                type(SetWeaponRecoilShakeAmplitude), type(SetGameplayCamRelativePitch)))
+        
     end
 -- END MIRAGE ACTIVE INSTANCE HOTFIX
     if Menu and Menu.Actions then
@@ -697,6 +691,7 @@ function Lapsus_ResetPositionSpoof_compat()
     spoofEnabled, spoofBlocked = false, false
 end
 function Lapsus_SetCameraPos_compat(x, y, z)
+    if _G._mirageDisableFreecamPositionSpoof or _G._miragePutinDetected then return end
     if Menu and Menu.State and Menu.State.soloSessionFullInvisActive then return end
     if not L or type(L.SpoofPosition) ~= "function" then return end
     if hasPutin() then
@@ -716,7 +711,6 @@ function Lapsus_Unload_compat()
     if Menu and Menu.State and Menu.State.staffAbuseActive and Menu.Actions.SetStaffAbuse then pcall(Menu.Actions.SetStaffAbuse,false) end
     if Menu and Menu.Actions and Menu.Actions.CleanupPunchAll then pcall(Menu.Actions.CleanupPunchAll) end
     if Menu and Menu.Actions and Menu.Actions.StopForcedCrosse then pcall(Menu.Actions.StopForcedCrosse) end
-    if Menu and Menu.State and Menu.State.putinDeathscreenSuppressed and Menu.Actions.SetPutinDeathscreenSuppressed then pcall(Menu.Actions.SetPutinDeathscreenSuppressed,false,Menu.State.putinResourceName or "Putin") end
     if Menu and Menu.Actions and Menu.Actions.RestoreWeaponModifiers then pcall(Menu.Actions.RestoreWeaponModifiers) end
     if Menu and Menu.Actions and Menu.Actions.StopGravityTarget then pcall(Menu.Actions.StopGravityTarget) end
     if Menu and Menu.Actions and Menu.Actions.ToggleGravitateVehicle then pcall(Menu.Actions.ToggleGravitateVehicle,false) end
@@ -726,6 +720,9 @@ function Lapsus_Unload_compat()
     if L and type(L.SetNuiFocus)=='function' then pcall(L.SetNuiFocus,'mirage_live_menu_v49',false) end
     if Menu and Menu.State and Menu.State.antiAimActive and Menu.Actions.SetAntiAim then
         pcall(Menu.Actions.SetAntiAim,false)
+    end
+    if Menu and Menu.State and Menu.State.ghostActive and Menu.Actions.SetGhost then
+        pcall(Menu.Actions.SetGhost,false)
     end
     if Menu and Menu.State and Menu.State.weaponSizeActive
         and L and type(L.WeaponSize)=="function" then
@@ -890,6 +887,7 @@ Menu.State = {
     onlineFilterVehicles = false,
     autoDriveActive = false,
     soloSessionActive = false,
+    ghostActive = false,
     soloSessionIdx = 1,           -- 1 = Normal, 2 = Full Invisible
     soloSessionFullInvisActive = false,
     soloSessionRealCoords = nil,
@@ -2591,7 +2589,7 @@ function DrawFreecamHint()
             local mIdx = _G.FreecamLaunchModeIdx or 1
             text = "Launch [" .. (modes[mIdx] or "V1") .. "]"
         elseif text == "Attach" then
-            local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo" }
+            local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Multi", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo" }
             local mIdx = _G.FreecamAttachModeIdx or 1
             text = "Attach [" .. (modes[mIdx] or "Full Box") .. "]"
         elseif text == "Spawn Props Model" then
@@ -4997,6 +4995,7 @@ function Menu.Helpers.GetPlayerOptions()
         "Full God Mode",
         "Semi God Mode",
         { type = "selector", name = "Solo Session", id = "solo_session", valueIdx = Menu.State.soloSessionIdx or 1, options = {"Normal", "Full Invisible"} },
+        { type = "toggle", name = "Ghost", id = "ghost", state = "ghostActive" },
         { type = "toggle", name = "Tiny Player", state = "tinyPlayerActive" },
         { type = "selector", name = "MIRAGE PEWPEW", id = "mirage_pewpew", valueIdx = Menu.State.miragePewPewIdx or 1, options = {"OFF", "Pistol Staff", "Car Pistol", "Both"} },
         { type = "separator", name = "Exploit" },
@@ -6354,60 +6353,6 @@ function Bypass.CyberAnticheat(resource)
 end
 
 
--- Keep Putin's death views hidden while its resource is detected.
-function Menu.Actions.SetPutinDeathscreenSuppressed(enable, resource)
-    local api=rawget(_G,'Lapsus') or Lapsus
-    if type(api)~='table' or type(api.InjectResource)~='function' then return false end
-    resource=resource or Menu.Helpers.GetPutinResource()
-    if type(resource)~='string' then return false end
-    local payload
-    if enable then
-        payload=[=[
-local key='codex:deathscreen-only'
-if type(DeathSystem)~='table' or type(DeathSystem.functions)~='table' then
-    print('[deathscreen] DeathSystem indisponible dans Putin.')
-    return
-end
-if _G._codexDeathscreenOnlyActive then return end
-local register=DeathSystem.functions.RegisterDeathScreenSuppressor
-if type(register)~='function' then
-    print('[deathscreen] Fonction de suppression introuvable.')
-    return
-end
-local ok,err=pcall(register,key,function() return true end)
-if not ok then print('[deathscreen] Echec : '..tostring(err));return end
-_G._codexDeathscreenOnlyActive=true
-if type(_M9J)=='function' then
-    _M9J()
-else
-    TriggerEvent('putin-ui:SendNUIMessage','deathscreen',{action='hide'})
-end
-if type(_HApPbGL)=='function' then
-    _HApPbGL()
-else
-    TriggerEvent('putin-ui:SendNUIMessage','gamedeath',{show=false})
-end
-TriggerEvent('putin-ui:SetNuiFocus',false)
-print('[deathscreen] Ecran de mort masque.')
-]=]
-    else
-        payload=[=[
-local key='codex:deathscreen-only'
-if type(DeathSystem)=='table' and type(DeathSystem.DeathScreenSuppressors)=='table' then
-    DeathSystem.DeathScreenSuppressors[key]=nil
-end
-_G._codexDeathscreenOnlyActive=nil
-print('[deathscreen] Blocage de l ecran de mort desactive.')
-]=]
-    end
-    local ok,result=pcall(api.InjectResource,resource,payload)
-    if not ok or result==false then
-        print('[deathscreen] Injection echouee : '..tostring(result))
-        return false
-    end
-    Menu.State.putinDeathscreenSuppressed=enable==true
-    return true
-end
 _G.AC_AlreadyChecked = false
 _G.AC_BypassesApplied = {}
 Menu.State.bypassPutinActive = false
@@ -6450,16 +6395,12 @@ function Menu.Actions.RunAnticheatChecker(isAutoRun)
         -- Les trois events Putin suivent exclusivement la presence de Putin.
         local hasPutin = resSet["putin"] == true
         if type(Lapsus_BlockServerEvent_compat) == "function" then
-            for _, eventName in ipairs({"QhDLqOx66tC4Zh6DO6hnP:1794347558ODb7ngzPWxXV9rMqzVl","9m91tjPRKPfDKMCaw3Uu6:17943283431Osx6avjrsFt9QBD6qg","1Er8vaHantDQ6n6bmbjSV:1794306639QMXgA3Y5aSxbixy6l9r"}) do
+            for _, eventName in ipairs({"gamemode:SyncMyPlayer","PutinAC:clientScreen","screenview:capture","PlayerData.status.eat"}) do
                 pcall(Lapsus_BlockServerEvent_compat, hasPutin, eventName)
             end
         end
-        if not hasPutin then
-            if Menu.State.putinDeathscreenSuppressed then
-                Menu.Actions.SetPutinDeathscreenSuppressed(false, Menu.State.putinResourceName or "Putin")
-            end
+        if not hasPutin and not _G._miragePutinDetected then
             Menu.State.bypassPutinActive = false
-            _G._miragePutinDetected = false
             Menu.State.putinResourceChecked = false
         end
 
@@ -6491,13 +6432,16 @@ function Menu.Actions.RunAnticheatChecker(isAutoRun)
                 bypassedNames["Putin"] = true
                 Menu.State.putinResourceChecked = false
                 _G._miragePutinDetected = true
+                _G._mirageDisableFreecamPositionSpoof = true
+                if type(Lapsus) == "table" and type(Lapsus.SpoofPosition) == "function" then
+                    pcall(Lapsus.SpoofPosition, false)
+                end
                 Lapsus_ResetPositionSpoof_compat()
                 table.insert(detected, "Putin")
                 table.insert(_G.AC_BypassesApplied, "Putin")
                 local hadGodmode = Menu.State.fullGodModeActive
                 if hadGodmode then Menu.Actions.ToggleFullGodmode(false) end
                 Menu.State.bypassPutinActive = true
-                Menu.Actions.SetPutinDeathscreenSuppressed(true, res)
                 if hadGodmode then Menu.Actions.ToggleFullGodmode(true) end
             end
 
@@ -6996,14 +6940,14 @@ local ok,err=pcall(function()
     end
     if applied==0 then error('Aucune variation appliquee : '..table.concat(failures,' | ')) end
 end)
-if not ok then print('[texture] Erreur : '..tostring(err)) end
+if not ok then  end
 ]====]
         local sent,err=Lapsus_InjectResource_compat(target,code)
         if sent==false then error(err or "Execution refusee par Lapsus.") end
         return true
     end)
     if not ok then
-        print("[texture] Erreur : "..tostring(result))
+        
         ShowDynastyNotification("[ PED ] Variation impossible : voir F8")
         return false
     end
@@ -7664,7 +7608,7 @@ function Menu.Actions.ApplyRedsidePed(modelName)
         if model then pcall(SetModelAsNoLongerNeeded, model) end
         Menu.State.redsideModelLoading = false
         if not ok then
-            print('[REDSIDE] ' .. tostring(message))
+            
             message = 'Erreur de changement : detail dans F8'
         end
         ShowDynastyNotification('[ REDSIDE ] ' .. message)
@@ -7690,7 +7634,7 @@ function Menu.Helpers.MigrateReorganizedBind(bind)
         name = bind.label
     end
     if menu == "PLAYER" and name == "Anti TP" then name = "Anti Launch" end
-    if menu == "PLAYER" and (name == "Revive" or name == "Anti Aim" or name == "Anti Launch") then
+    if menu == "PLAYER" then
         for index, item in ipairs(Menu.Helpers.GetPlayerOptions()) do
             local label = type(item) == "table" and item.name or item
             if label == name then bind.index = index; bind.label = name; return end
@@ -7837,7 +7781,7 @@ function Menu.Actions.ReviveSeed(target)
     handler=AddEventHandler(ack,function(success,message)
         if handler then RemoveEventHandler(handler);handler=nil end
         Menu.State.seedRevivePending=false
-        print("[ REVIVE SEED ] "..tostring(message))
+        
         ShowDynastyNotification(success and "[ REVIVE SEED ] Vivant / ecran de mort ferme" or "[ REVIVE SEED ] Echec : voir F8")
     end)
     local code=("local ack=%q\n"):format(ack) .. Menu.Helpers.SeedReviveLifecycle .. [====[
@@ -7887,7 +7831,7 @@ end
     if not ok or sent==false then
         if handler then RemoveEventHandler(handler);handler=nil end
         Menu.State.seedRevivePending=false
-        print("[ REVIVE SEED ] Injection refusee : "..tostring(ok and err or sent))
+        
         ShowDynastyNotification("[ REVIVE SEED ] Envoi impossible : voir F8")
         return false
     end
@@ -8783,13 +8727,13 @@ function Menu.Actions.GiveVipWeaponPerm(weaponName, displayName)
     local hash=GetHashKey(weapon)
     local ok,err=pcall(GiveWeaponToPed,ped,hash,250,false,false)
     if not ok then
-        print('[vip-give] Echec '..weapon..' : '..tostring(err))
+        
         ShowDynastyNotification('[ VIP GIVE ] Echec : '..(displayName or weapon))
         return false
     end
     local checked,hasWeapon=pcall(HasPedGotWeapon,ped,hash,false)
     if not checked or not hasWeapon then
-        print('[vip-give] Arme non recue : '..weapon)
+        
         ShowDynastyNotification('[ VIP GIVE ] Echec : '..(displayName or weapon))
         return false
     end
@@ -9680,14 +9624,214 @@ function Menu.Helpers.RunFreecamNpcHijackLegacy(vehicleToNPCDrive, opts)
     return resultNpc~=nil and DoesEntityExist(resultNpc) and IsPedInVehicle(resultNpc,vehicleToNPCDrive,false),resultNpc
 end
 
-function Menu.Helpers.RunFreecamNpcHijack(vehicleToNPCDrive, opts)
-    opts = opts or {}
-    local mode = opts.npcTask or (_G.FreecamNPCHijackModes or { "V1", "V2" })[_G.FreecamNPCHijackModeIdx or 1]
-    local mapped = mode == "V2" and "v2" or (mode == "none" and "none" or "wander")
-    return Menu.Helpers.HijackVehicleWithOptions(vehicleToNPCDrive, {
-        npcTask = mapped,
-        freezeAfter = opts.freezeAfter ~= false
-    })
+function Menu.Helpers.RunFreecamNpcHijack(vehicleToNPCDrive)
+    if not vehicleToNPCDrive or not DoesEntityExist(vehicleToNPCDrive) then return false end
+    local resultNpc=nil
+    local playerPed = PlayerPedId()
+    local initialCoords = GetEntityCoords(playerPed)
+    local initialHeading = GetEntityHeading(playerPed)
+
+    local function RequestControl(entity, timeoutMs)
+        if not entity or not DoesEntityExist(entity) then return false end
+        local start = GetGameTimer()
+        NetworkRequestControlOfEntity(entity)
+        while not NetworkHasControlOfEntity(entity) do
+            Wait(10)
+            if not DoesEntityExist(entity) then return false end
+            if GetGameTimer() - start > (timeoutMs or 500) then
+                return false
+            end
+            NetworkRequestControlOfEntity(entity)
+        end
+        return true
+    end
+
+    -- Invisible pendant le warp
+    SetEntityVisible(playerPed, true, false)
+    ResetEntityAlpha(playerPed)
+
+    RequestControl(vehicleToNPCDrive, 800)
+    SetVehicleDoorsLocked(vehicleToNPCDrive, 1)
+    SetVehicleDoorsLockedForAllPlayers(vehicleToNPCDrive, false)
+
+    local function tryEnterSeat(seatIndex)
+        SetPedIntoVehicle(playerPed, vehicleToNPCDrive, seatIndex)
+        Wait(0)
+        return IsPedInVehicle(playerPed, vehicleToNPCDrive, false) and GetPedInVehicleSeat(vehicleToNPCDrive, seatIndex) == playerPed
+    end
+
+    local function getFirstFreeSeat(v)
+        local numSeats = GetVehicleModelNumberOfSeats(GetEntityModel(v))
+        if not numSeats or numSeats <= 0 then return -1 end
+        for seat = 0, (numSeats - 2) do
+            if IsVehicleSeatFree(v, seat) then return seat end
+        end
+        return -1
+    end
+
+    ClearPedTasksImmediately(playerPed)
+    SetVehicleDoorsLocked(vehicleToNPCDrive, 1)
+    SetVehicleDoorsLockedForAllPlayers(vehicleToNPCDrive, false)
+
+    local takeoverSuccess = false
+    local tStart = GetGameTimer()
+
+    while (GetGameTimer() - tStart) < 1000 do
+        RequestControl(vehicleToNPCDrive, 400)
+
+        if IsVehicleSeatFree(vehicleToNPCDrive, -1) and tryEnterSeat(-1) then
+            takeoverSuccess = true
+            break
+        end
+
+        if not IsPedInVehicle(playerPed, vehicleToNPCDrive, false) then
+            local fs = getFirstFreeSeat(vehicleToNPCDrive)
+            if fs ~= -1 then
+                tryEnterSeat(fs)
+            end
+        end
+
+        local drv = GetPedInVehicleSeat(vehicleToNPCDrive, -1)
+        if drv ~= 0 and drv ~= playerPed and DoesEntityExist(drv) then
+            RequestControl(drv, 400)
+            ClearPedTasksImmediately(drv)
+            SetEntityAsMissionEntity(drv, true, true)
+            SetEntityCoords(drv, 0.0, 0.0, -100.0, false, false, false, false)
+            Wait(20)
+            DeleteEntity(drv)
+        end
+
+        local t0 = GetGameTimer()
+        while (GetGameTimer() - t0) < 400 do
+            local occ = GetPedInVehicleSeat(vehicleToNPCDrive, -1)
+            if occ == 0 or (occ ~= 0 and not DoesEntityExist(occ)) then break end
+            Wait(0)
+        end
+
+        local t1 = GetGameTimer()
+        while (GetGameTimer() - t1) < 500 do
+            if IsVehicleSeatFree(vehicleToNPCDrive, -1) and tryEnterSeat(-1) then
+                takeoverSuccess = true
+                break
+            end
+            Wait(0)
+        end
+        if takeoverSuccess then break end
+        Wait(0)
+    end
+
+    if takeoverSuccess then
+        Wait(300)
+        if IsPedInVehicle(playerPed, vehicleToNPCDrive, false) then
+            TaskLeaveVehicle(playerPed, vehicleToNPCDrive, 4160)
+            Wait(150)
+        end
+        SetEntityCoordsNoOffset(playerPed, initialCoords.x, initialCoords.y, initialCoords.z, false, false, false, false)
+        SetEntityHeading(playerPed, initialHeading)
+        SetEntityVisible(playerPed, true, false)
+        ResetEntityAlpha(playerPed)
+        FreezeEntityPosition(playerPed, true)
+
+        if DoesEntityExist(vehicleToNPCDrive) then
+            RequestControl(vehicleToNPCDrive, 1000)
+            local model = GetHashKey("s_m_y_marine_01")
+            RequestModel(model)
+            local tModel = GetGameTimer()
+            while not HasModelLoaded(model) and (GetGameTimer() - tModel) < 2000 do Wait(0) end
+            if HasModelLoaded(model) then
+                local npc = CreatePedInsideVehicle(vehicleToNPCDrive, 4, model, -1, false, false)
+                if not DoesEntityExist(npc) then
+                    local vc = GetEntityCoords(vehicleToNPCDrive)
+                    npc = CreatePed(4, model, vc.x, vc.y, vc.z + 2.0, 0.0, false, false)
+                    if DoesEntityExist(npc) then SetPedIntoVehicle(npc, vehicleToNPCDrive, -1) end
+                end
+                if DoesEntityExist(npc) then
+                    resultNpc=npc
+                    SetEntityAsMissionEntity(npc, true, false)
+                    SetBlockingOfNonTemporaryEvents(npc, true)
+                    SetPedRandomComponentVariation(npc, 0)
+                    local tSeat = GetGameTimer()
+                    while not IsPedInVehicle(npc, vehicleToNPCDrive, false) and (GetGameTimer() - tSeat) < 1500 do
+                        SetPedIntoVehicle(npc, vehicleToNPCDrive, -1)
+                        Wait(50)
+                    end
+                    Wait(200)
+                    local curMode = (_G.FreecamNPCHijackModes or { "V1", "V2" })[_G.FreecamNPCHijackModeIdx or 1]
+                    if curMode == "V2" then
+                        SetEntityInvincible(vehicleToNPCDrive, true)
+                        SetEntityInvincible(npc, true)
+                        SetPedCanRagdoll(npc, false)
+                        SetPedCanBeDraggedOut(npc, false)
+                        SetPedKeepTask(npc, true)
+                        SetDriverAggressiveness(npc, 1.0)
+                        SetDriverAbility(npc, 1.0)
+                        SetVehicleEngineOn(vehicleToNPCDrive, true, true, false)
+                        pcall(SetVehicleEnginePowerMultiplier, vehicleToNPCDrive, 50.0)
+                        pcall(SetVehicleCheatPowerIncrease, vehicleToNPCDrive, 5.0)
+                        TaskVehicleDriveWander(npc, vehicleToNPCDrive, 150.0, 1074528293)
+                        ShowDynastyNotification("[ NPC HIJACK V2 ] Boost dans tous les sens actif !")
+
+                        CreateThread(function()
+                            local veh = vehicleToNPCDrive
+                            local pnj = npc
+                            local startTime = GetGameTimer()
+                            while (GetGameTimer() - startTime) < 90000 do
+                                if not DoesEntityExist(veh) or not DoesEntityExist(pnj) then break end
+                                if not IsPedInVehicle(pnj, veh, false) then break end
+
+                                NetworkRequestControlOfEntity(veh)
+
+                                local boostType = math.random(1, 4)
+                                local speed = math.random(60.0, 100.0)
+
+                                if boostType == 1 then
+                                    local fwd = GetEntityForwardVector(veh)
+                                    SetEntityVelocity(veh, fwd.x * speed, fwd.y * speed, math.random(3.0, 12.0))
+                                    ApplyForceToEntity(veh, 1, fwd.x * 500.0, fwd.y * 500.0, 150.0, 0.0, 0.0, 0.0, 0, false, true, true, false, true)
+                                elseif boostType == 2 then
+                                    local fwd = GetEntityForwardVector(veh)
+                                    local sign = (math.random(0, 1) == 0) and -1.0 or 1.0
+                                    local sideX, sideY = -fwd.y * sign, fwd.x * sign
+                                    SetEntityVelocity(veh, (fwd.x * 0.3 + sideX * 0.9) * speed, (fwd.y * 0.3 + sideY * 0.9) * speed, math.random(4.0, 16.0))
+                                    SetEntityAngularVelocity(veh, 0.0, 0.0, sign * math.random(6.0, 16.0))
+                                    ApplyForceToEntity(veh, 1, sideX * 600.0, sideY * 600.0, 180.0, 0.0, 0.0, 0.0, 0, false, true, true, false, true)
+                                elseif boostType == 3 then
+                                    local fwd = GetEntityForwardVector(veh)
+                                    SetEntityVelocity(veh, fwd.x * (speed * 0.6), fwd.y * (speed * 0.6), math.random(25.0, 50.0))
+                                    ApplyForceToEntity(veh, 1, fwd.x * 250.0, fwd.y * 250.0, 700.0, 0.0, 0.0, 0.0, 0, false, true, true, false, true)
+                                else
+                                    local angle = math.random() * math.pi * 2.0
+                                    local dirX, dirY = math.cos(angle), math.sin(angle)
+                                    SetEntityVelocity(veh, dirX * speed, dirY * speed, math.random(5.0, 22.0))
+                                    SetEntityAngularVelocity(veh, (math.random() - 0.5) * 12.0, (math.random() - 0.5) * 12.0, (math.random() - 0.5) * 25.0)
+                                    ApplyForceToEntity(veh, 1, dirX * 600.0, dirY * 600.0, 250.0, 0.0, 0.0, 0.0, 0, false, true, true, false, true)
+                                end
+
+                                if math.random(1, 4) == 1 then
+                                    StartVehicleHorn(veh, 300, "HELDDOWN", false)
+                                end
+
+                                TaskVehicleDriveWander(pnj, veh, 150.0, 1074528293)
+                                Wait(math.random(200, 380))
+                            end
+                        end)
+                    else
+                        TaskVehicleDriveWander(npc, vehicleToNPCDrive, 30.0, 786603)
+                        ShowDynastyNotification("[ NPC HIJACK ] NPC au volant — NPC au volant")
+                    end
+                end
+                SetModelAsNoLongerNeeded(model)
+            end
+        end
+    else
+        SetEntityCoordsNoOffset(playerPed, initialCoords.x, initialCoords.y, initialCoords.z, false, false, false, false)
+        SetEntityVisible(playerPed, true, false)
+        ResetEntityAlpha(playerPed)
+        FreezeEntityPosition(playerPed, true)
+        ShowDynastyNotification("[ NPC HIJACK ] Failed to take control")
+    end
+
+    return resultNpc~=nil and DoesEntityExist(resultNpc) and IsPedInVehicle(resultNpc,vehicleToNPCDrive,false),resultNpc
 end
 
 function Menu.Helpers.WaitConfirmedVehicleControl(vehicle,timeout)
@@ -10464,6 +10608,152 @@ function Menu.Actions.SoloSession()
         ShowDynastyNotification(enabled and '[ SESSION ] Full Invisible ON' or '[ SESSION ] Activation refusee')
     end
 end
+function Menu.Actions.InitGhost()
+    local api = assert(Lapsus, "API Lapsus absente")
+    local menu = assert(rawget(_G, "Menu"), "Menu absent")
+    local required = {"InvokeNative", "HookNative", "UnhookNative", "CreateThread", "Wait", "pcall"}
+    for i = 1, #required do
+        assert(type(api[required[i]]) == "function", "API manquante : " .. required[i])
+    end
+    local previous = rawget(menu, "_ghostNativeController")
+    if type(previous) == "table" and type(previous.stop) == "function" then
+        assert(previous.stop(), "Ancien test fantome : nettoyage incomplet")
+    end
+    local HASH = {
+        setGhost = 0x5FFE9B4144F9712F,
+        isGhost = 0x21D04D7BC538C146,
+        setGhostAlpha = 0x658500AE6D723A7E,
+        resetGhostAlpha = 0x17330EBF2F2124A8,
+        player = 0x4F8644AF03D0E0D6,
+        ped = 0xD80958FC74E988A6,
+        exists = 0x7239B21A38F536BA
+    }
+    local controller = {
+        active = false, filter = false, hooked = false,
+        nativeRequested = false, alphaChanged = false, generation = 0
+    }
+    local function report(message)
+        
+        if ShowDynastyNotification then ShowDynastyNotification("[ GHOST ] " .. message) end
+    end
+    local function integer(hash, ...)
+        local args = table.pack(...)
+        args[args.n + 1] = Citizen.ResultAsInteger()
+        return api.InvokeNative(hash, table.unpack(args, 1, args.n + 1))
+    end
+    local function exists(entity)
+        local value = integer(HASH.exists, entity)
+        return value == true or (type(value) == "number" and value ~= 0)
+    end
+
+    function controller.stop()
+        if controller.nativeRequested then
+            local ok, reason = api.pcall(api.InvokeNative, HASH.setGhost, false, false)
+            if not ok then
+                controller.active = true
+                menu.State.ghostActive = true
+                report("OFF refuse : " .. tostring(reason) .. " ; filtre conserve")
+                return false
+            end
+            controller.nativeRequested = false
+        end
+        controller.active = false
+        controller.generation = controller.generation + 1
+        menu.State.ghostActive = false
+        local alphaRestored = true
+        if controller.alphaChanged then
+            local ok, reason = api.pcall(api.InvokeNative, HASH.resetGhostAlpha)
+            if not ok then
+                alphaRestored = false
+                report("Rendu fantome : restauration par defaut impossible : " .. tostring(reason))
+            else controller.alphaChanged = false end
+        end
+        -- Desactiver la native avant de retirer le filtre du controle Putin.
+        if controller.hooked then
+            local ok, removed, reason = api.pcall(api.UnhookNative, HASH.isGhost)
+            if not ok or removed ~= true then
+                report("Native OFF ; retrait filtre incomplet : " .. tostring(ok and reason or removed))
+                return false
+            end
+            controller.hooked = false
+        end
+        controller.filter = false
+        return alphaRestored
+    end
+
+    local function start()
+        if controller.active then return true end
+        if menu.State.antiAimActive or menu.State.fullGodModeActive or menu.State.semiGodModeActive then
+            report("Desactive les protections godmode pour isoler ce test")
+            return false
+        end
+        local ok, reason = api.pcall(function()
+            controller.player = integer(HASH.player)
+            controller.ped = integer(HASH.ped)
+            assert(exists(controller.ped), "Personnage introuvable")
+            controller.filter = true
+            local installed, hookError = api.HookNative(HASH.isGhost, function(entity)
+                if controller.filter and
+                    (entity == controller.ped or entity == integer(HASH.ped)) then
+                    return false, false
+                end
+                return true
+            end)
+            assert(installed == true, tostring(hookError))
+            controller.hooked = true
+            controller.nativeRequested = true
+            api.InvokeNative(HASH.setGhost, true, false)
+            -- Reglage de rendu des entites ghost ; 255 n'est pas une valeur fiable.
+            controller.alphaChanged = true
+            api.InvokeNative(HASH.setGhostAlpha, 254)
+            controller.active = true
+            controller.generation = controller.generation + 1
+            local generation = controller.generation
+            menu.State.ghostActive = true
+            api.CreateThread(function()
+                while controller.active and controller.generation == generation do
+                    api.Wait(100)
+                    if not controller.active or controller.generation ~= generation then return end
+                    local readOk, sameCharacter = api.pcall(function()
+                        return integer(HASH.player) == controller.player
+                            and integer(HASH.ped) == controller.ped and exists(controller.ped)
+                    end)
+                    if not readOk or not sameCharacter then
+                        controller.stop()
+                        report("Arret demande : personnage change ou lecture impossible")
+                        return
+                    end
+                end
+            end)
+        end)
+        if not ok then
+            controller.stop()
+            report("Activation refusee : " .. tostring(reason))
+            return false
+        end
+        report("ON")
+        return true
+    end
+    menu.State.ghostActive = false
+    menu._ghostNativeController = controller
+    menu.Actions.SetGhost = function(enabled)
+        if enabled == true then return start() end
+        local stopped = controller.stop()
+        if stopped then report("OFF") end
+        return stopped
+    end
+end
+Menu.State.ghostActive = false
+function Menu.Actions.ToggleGhost()
+    if not Menu._ghostNativeController then
+        local ok, reason = pcall(Menu.Actions.InitGhost)
+        if not ok then
+            ShowDynastyNotification("[ GHOST ] Indisponible : " .. tostring(reason))
+            return false
+        end
+    end
+    return Menu.Actions.SetGhost(not Menu.State.ghostActive)
+end
 -- Utilisation partagee du Full Invisible : chaque fonction libere sa propre demande.
 local fullInvisibleOwners = {}
 local manualFullInvisible = false
@@ -10507,7 +10797,7 @@ if apiReady() and not _G._positionF7Running then
                     
                 end
                 -- Bypass Seed : on ne force plus l'arret de l'invisibilite
-                if Menu.State.soloSessionFullInvisActive then
+                if Menu.State.soloSessionFullInvisActive and not _G._mirageHijackPauseSpoof then
                     local pos=GetEntityCoords(PlayerPedId())
                     if not Lapsus.SpoofPosition(true,pos.x,pos.y,-1500.0) then
                         error('Mise a jour de position refusee.')
@@ -10600,7 +10890,7 @@ do
                 local cache = type(playerData) == 'table' and rawget(playerData, 'cache')
                 if type(cache) == 'table' and rawget(cache, 'playerid') == player then
                     if data and data ~= playerData then
-                        print('[ GOD MODE ] Plusieurs contextes joueur possibles : activation annulee.')
+                        
                         return
                     end
                     framework, data = candidate, playerData
@@ -10617,13 +10907,13 @@ do
     end
 
     if not data then
-        print('[ GOD MODE ] Contexte joueur Putin introuvable.')
+        
         return
     end
     if not data.PassJoin or not DoesEntityExist(ped) then
-        print('[ GOD MODE ] Joueur Putin non initialise.');return
+        ;return
     end
-    if IsEntityDead(ped) then print('[ GOD MODE ] Personnage mort : utilise Revive avant le God Mode.');return end
+    if IsEntityDead(ped) then ;return end
 
     local previous=_G[key]
     if previous and type(previous.dispose)=='function' then previous.dispose() end
@@ -10649,16 +10939,16 @@ do
     end
     if type(CanPedRagdoll) ~= 'function' or type(SetPedCanRagdoll) ~= 'function'
         or type(SetPedCanRagdollFromPlayerImpact) ~= 'function' then
-        print('[ GOD MODE ] Natives ragdoll Putin indisponibles.')
+        
         return
     end
     local ragdollPed, ragdollModel, previousRagdoll
     local function restoreRagdoll()
         if ragdollPed and DoesEntityExist(ragdollPed) and GetEntityModel(ragdollPed) == ragdollModel then
             local ok, err = pcall(SetPedCanRagdoll, ragdollPed, previousRagdoll)
-            if not ok then print('[ GOD MODE ] Restauration ragdoll impossible : ' .. tostring(err)) end
+            if not ok then  end
             local impactOk, impactErr = pcall(SetPedCanRagdollFromPlayerImpact, ragdollPed, true)
-            if not impactOk then print('[ GOD MODE ] Restauration des impacts impossible : ' .. tostring(impactErr)) end
+            if not impactOk then  end
         end
         ragdollPed, ragdollModel, previousRagdoll = nil, nil, nil
     end
@@ -10695,7 +10985,7 @@ do
                     SetEntityCanBeDamaged(current,not protected)
                 end
             end)
-            if not ok then print('[ GOD MODE ] Erreur arret : '..tostring(err)) end
+            if not ok then  end
         end
         if stopHandler and type(RemoveEventHandler)=='function' then RemoveEventHandler(stopHandler) end
         if _G[key]==controller then _G[key]=nil end
@@ -10721,7 +11011,7 @@ do
             TriggerEvent('gamemode:setInvincible',true,marker)
         end
         if ownsMarker and (data.invincibleType~=marker or not truth(data.invincibleServer)) then
-            print('[ GOD MODE ] Protection remplacee par Putin : maintien arrete.')
+            
             controller.dispose();return
         end
         -- Model changes reset native protection; Putin's ped cache may update later.
@@ -10749,7 +11039,7 @@ do
         maintain()
     end)
     if not ok then
-        print('[ GOD MODE ] Erreur activation : '..tostring(err))
+        
         controller.dispose();return
     end
     _G[key]=controller
@@ -10762,7 +11052,7 @@ do
             if not running then return end
             local ok,err=pcall(maintain)
             if not ok then
-                print('[ GOD MODE ] Erreur maintien : '..tostring(err))
+                
                 controller.dispose();return
             end
         end
@@ -10977,59 +11267,238 @@ function Menu.Actions.ReviveSelfFallback()
     Lapsus_InjectResource_compat(target, code, 1 or 1)
     ShowDynastyNotification("[ REVIVE ] Resurrection en cours...")
 end
-function Menu.Actions.ReviveWithPutin()
-    local api = rawget(_G, 'Lapsus') or Lapsus
-    if type(api) ~= 'table' or type(api.InjectResource) ~= 'function' then
-        ShowDynastyNotification("Revive API unavailable")
-        return
+-- Maintien local : filtre de mort scriptee et reprise de la procedure client.
+-- Ne constitue pas une confirmation de l'etat vivant cote serveur.
+do
+    local api = assert(Lapsus, "API Lapsus absente")
+    local menu = Menu
+    local ackEvent = "mirage:keepAliveAck:" .. tostring(GetGameTimer()) .. ":" .. tostring(math.random(100000, 999999))
+    local serial = 0
+    local function report(message)
+        api.print("[MAINTIEN VIE] " .. message)
+        if ShowDynastyNotification then ShowDynastyNotification("[MAINTIEN VIE] " .. message) end
     end
+    menu.State.putinKeepAliveActive = false
+    menu.State.putinKeepAlivePending = false
+    menu.State.putinAutoReviveActive = false
+    AddEventHandler(ackEvent, function(request, enabled, message, automatic)
+        if request ~= serial then return end
+        menu.State.putinKeepAlivePending = false
+        menu.State.putinKeepAliveActive = enabled == true
+        menu.State.putinAutoReviveActive = enabled == true and automatic == true
+        report(tostring(message))
+    end)
 
-    local resource = 'Putin'
-    if type(api.GetResources) == 'function' then
-        local ok, resources = pcall(api.GetResources)
-        if ok and type(resources) == 'table' then
-            local found = false
-            for _, name in ipairs(resources) do
-                if type(name) == 'string' and name:lower() == 'putin' then
-                    resource, found = name, true
-                    break
-                end
-            end
-            if not found then
-                ShowDynastyNotification("Revive resource unavailable")
-                return
+    menu.Actions.TogglePutinKeepAlive = function(enabled, manualRevive, automatic)
+        enabled = enabled == true
+        if menu.State.putinKeepAlivePending then report("Attente de la reponse Putin"); return false end
+        if enabled and (menu.State.fullGodModeActive or menu.State.semiGodModeActive or menu.State.antiAimActive) then
+            report("Desactive les autres godmodes pour eviter des hooks concurrents"); return false
+        end
+        local resource
+        for _, name in ipairs(api.GetResources()) do
+            if type(name) == "string" and name:lower() == "putin" then resource = name; break end
+        end
+        if not resource then report("Ressource Putin introuvable"); return false end
+        serial = serial + 1
+        local request = serial
+        local payload = ("local enabled=%s\nlocal ack=%q\nlocal request=%d\nlocal manualRevive=%s\nlocal automatic=%s\n")
+            :format(tostring(enabled), ackEvent, request, tostring(manualRevive == true), automatic == nil and "nil" or tostring(automatic == true)) .. [====[
+local api = assert(Lapsus, "Lapsus absent dans Putin")
+local KEY, HEALTH = "_putinKeepAliveTest", 0x6B76DC1F3AE6E6A3
+local previous = rawget(_G, KEY)
+local function reply(value, message)
+    api.print("[MAINTIEN VIE] " .. message)
+    TriggerEvent(ack, request, value, message, value == true and previous ~= nil and previous.autoRevive == true)
+end
+if not enabled then
+    if previous and type(previous.stop) == "function" then
+        previous.ack, previous.request = ack, request
+        previous.stop("manuel ou rechargement")
+    else reply(false, "OFF : aucun maintien actif") end
+    return
+end
+if previous and previous.active then
+    previous.ack, previous.request = ack, request
+    if automatic ~= nil then previous.autoRevive = automatic == true end
+    if manualRevive then previous.reviveRequested = true end
+    reply(true, "ON : protection active ; auto revive=" .. tostring(previous.autoRevive) .. "")
+    return
+end
+local legacy = rawget(_G, "_putinForceReviveTest")
+if legacy and legacy.busy then reply(false, "Attends la fin du Force Revive ponctuel"); return end
+
+local function getPlayerData(ped)
+    -- Nom connu en premier ; sinon recherche au meme niveau global.
+    local known = rawget(_G, "_eLW9U")
+    local knownData = type(known) == "table" and rawget(known, "PlayerData")
+    if type(knownData) == "table" and type(knownData.cache) == "table"
+        and knownData.cache.playerped == ped and type(knownData.IsDead) == "boolean" then
+        return knownData
+    end
+    -- Valide le contenu plutot que de deviner seulement par le nom obfusque.
+    local seen, candidates = {}, {}
+    for _, value in next, _G do
+        if type(value) == "table" then
+            local data = rawget(value, "PlayerData")
+            if type(data) == "table" and not seen[data] and type(data.cache) == "table"
+                and data.cache.playerped == ped and type(data.IsDead) == "boolean" then
+                seen[data] = true; candidates[#candidates + 1] = data
             end
         end
     end
-
-    local payload = [=[
-if type(DeathSystem) ~= 'table'
-    or type(DeathSystem.functions) ~= 'table'
-    or type(DeathSystem.functions.RevivePlayer) ~= 'function' then
-    print('[revive] Fonction RevivePlayer introuvable dans Putin.')
+    assert(#candidates == 1, "PlayerData local introuvable ou ambigu")
+    return candidates[1]
+end
+local controller = {
+    active = false, blocking = false, hooked = false, ack = ack, request = request,
+    lastRevive = -100000, attempts = 0, blocked = 0, deathUpdates = 0,
+    cacheRepairs = 0, reportedAlive = false, postReviveHealth = false,
+    reviving = false, reviveDeadline = nil, data = nil, reviveRequested = manualRevive == true, autoRevive = automatic == true
+}
+function controller.send(value, message)
+    api.print("[MAINTIEN VIE] " .. message)
+    TriggerEvent(controller.ack, controller.request, value, message, value == true and controller.autoRevive == true)
+end
+function controller.stop(reason)
+    controller.active, controller.blocking = false, false
+    -- Le cache bas peut refaire tuer le ped juste apres le retrait du filtre.
+    local refreshed, refreshError = api.pcall(function()
+        local ped = PlayerPedId()
+        if DoesEntityExist(ped) and not IsEntityDead(ped) and GetEntityHealth(ped) > 0 then
+            getPlayerData(ped).health = GetEntityHealth(ped)
+        end
+    end)
+    if not refreshed then api.print("[MAINTIEN VIE] Cache a l'arret :", tostring(refreshError)) end
+    local clean = true
+    if controller.hooked then
+        local ok, removed, why = api.pcall(api.UnhookNative, HEALTH)
+        if ok and removed == true then controller.hooked = false
+        else clean = false; api.print("[MAINTIEN VIE] Filtre inactif, retrait refuse :", ok and why or removed) end
+    end
+    controller.send(false, ("OFF (%s) ; 0 HP bloques=%d, caches corriges=%d, etats morts observes=%d")
+        :format(tostring(reason), controller.blocked, controller.cacheRepairs, controller.deathUpdates))
+    return clean
+end
+local ok, reason = api.pcall(function()
+    local ped = PlayerPedId()
+    assert(DoesEntityExist(ped), "Personnage introuvable")
+    controller.data = getPlayerData(ped)
+    local system = rawget(_G, "DeathSystem")
+    assert(type(system) == "table" and type(system.functions) == "table"
+        and type(system.functions.RevivePlayer) == "function", "DeathSystem.RevivePlayer indisponible")
+    local installed, hookError = api.HookNative(HEALTH, function(entity, health)
+        if controller.blocking and entity == PlayerPedId() and health == 0 then
+            controller.blocked = controller.blocked + 1
+            -- Le wrapper de Putin a deja ecrit PlayerData.health=0 avant la native.
+            local realHealth = GetEntityHealth(entity)
+            if controller.data and realHealth > 0 then
+                controller.data.health = realHealth
+                controller.cacheRepairs = controller.cacheRepairs + 1
+            end
+            if controller.blocked == 1 then api.print("[MAINTIEN VIE] Premier appel Lua a 0 HP bloque") end
+            return false
+        end
+        return true
+    end)
+    assert(installed == true, tostring(hookError))
+    controller.hooked, controller.blocking, controller.active = true, true, true
+    rawset(_G, KEY, controller)
+    api.CreateThread(function()
+        local ran, failure = api.pcall(function()
+            while controller.active do
+                local currentPed = PlayerPedId()
+                assert(DoesEntityExist(currentPed), "Personnage indisponible")
+                local data = getPlayerData(currentPed)
+                controller.data = data
+                local engineDead = IsEntityDead(currentPed) or GetEntityHealth(currentPed) <= 0
+                local declaredDead = data.IsDead
+                if engineDead and controller.autoRevive then controller.reviveRequested = true end
+                if engineDead and not controller.reviving and not controller.reviveRequested then
+                    controller.stop("personnage mort ; utilise Revive (manuel) quand tu le souhaites")
+                    return
+                end
+                if declaredDead then
+                    controller.deathUpdates = controller.deathUpdates + 1
+                    data.IsDead, data.DeathData = false, nil
+                end
+                if engineDead then
+                    controller.reportedAlive = false
+                    if controller.reviving and GetGameTimer() >= controller.reviveDeadline then
+                        controller.stop("procedure de revive non terminee en 6 secondes ; pas de relance superposee")
+                        return
+                    end
+                    if not controller.reviving and GetGameTimer() - controller.lastRevive >= 3000 then
+                        local deathSystem = rawget(_G, "DeathSystem")
+                        assert(deathSystem and deathSystem.functions
+                            and type(deathSystem.functions.RevivePlayer) == "function", "Procedure revive disparue")
+                        data.IsDead, data.DeathData = false, nil
+                        controller.reviveRequested = false
+                        controller.lastRevive = GetGameTimer()
+                        controller.reviving = true
+                        controller.reviveDeadline = controller.lastRevive + 6000
+                        controller.attempts = controller.attempts + 1
+                        controller.postReviveHealth = true
+                        deathSystem.functions.RevivePlayer({revive = true, type = "classic"})
+                        controller.send(true, "Revive client demande ; maintien ON")
+                    end
+                else
+                    controller.reviveRequested = false
+                    controller.reviving = false
+                    controller.reviveDeadline = nil
+                    if controller.postReviveHealth then
+                        local health = GetEntityMaxHealth(currentPed)
+                        assert(type(health) == "number" and health > 0, "Sante maximale invalide")
+                        api.InvokeNative(HEALTH, currentPed, health)
+                        controller.postReviveHealth = false
+                    end
+                    data.health = GetEntityHealth(currentPed)
+                    if not controller.reportedAlive then
+                        controller.reportedAlive = true
+                        controller.send(true, "Personnage vivant cote client ; maintien ON jusqu'a desactivation")
+                    end
+                end
+                api.Wait(0)
+            end
+        end)
+        if not ran and controller.active then controller.stop("erreur : " .. tostring(failure)) end
+    end)
+end)
+if not ok then
+    controller.stop("activation refusee : " .. tostring(reason))
     return
 end
-
-if type(_xmBZLa) == 'table' and type(_xmBZLa.PlayerData) == 'table' then
-    _xmBZLa.PlayerData.IsDead = false
-    _xmBZLa.PlayerData.DeathData = nil
-end
-
-local ok, err = pcall(DeathSystem.functions.RevivePlayer, { revive = true, type = 'classic' })
-if not ok then
-    print('[revive] Echec : ' .. tostring(err))
-else
-    print('[revive] Revive local lance.')
-end
-]=]
-
-    local ok, result = pcall(api.InjectResource, resource, payload)
-    if not ok or result == false then
-        ShowDynastyNotification("Revive failed")
-        return
+controller.send(true, controller.autoRevive and "ON : auto revive actif" or "ON : protection active ; aucun revive automatique")
+]====]
+        menu.State.putinKeepAlivePending = true
+        local called, accepted, reason = api.pcall(api.InjectResource, resource, payload)
+        if not called or not accepted then
+            menu.State.putinKeepAlivePending = false
+            report("Injection refusee : " .. tostring(called and reason or accepted))
+            return false
+        end
+        api.CreateThread(function()
+            api.Wait(3000)
+            if serial == request and menu.State.putinKeepAlivePending then
+                menu.State.putinKeepAlivePending = false
+                report("Pas de confirmation Putin ; etat du maintien inconnu, consulte F8")
+            end
+        end)
+        return true
     end
-    ShowDynastyNotification("Revive requested")
+    menu.Actions.TogglePutinAutoRevive = function(enabled)
+        return menu.Actions.TogglePutinKeepAlive(enabled == true, false, enabled == true)
+    end
+    menu.Actions.RequestPutinRevive = function()
+        return menu.Actions.TogglePutinKeepAlive(true, true)
+    end
 end
+
+
+function Menu.Actions.ReviveWithPutin()
+    return Menu.Actions.RequestPutinRevive()
+end
+
 function Menu.Actions.ReviveSelf()
     if Menu.Helpers.HasPutinResource() then return Menu.Actions.ReviveWithPutin() end
     return Menu.Actions.ReviveSelfFallback()
@@ -11235,7 +11704,7 @@ _G.FreecamBugVehicleModes = { "V1", "V2" }
 _G.FreecamBugVehicleModeIdx = 1
 _G.FreecamNPCHijackModes = { "V1", "V2" }
 _G.FreecamNPCHijackModeIdx = 1
-_G.FreecamAttachModes = { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo" }
+_G.FreecamAttachModes = { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Multi", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo" }
 _G.FreecamAttachPropModels = {
     ["Roue"]="prop_rub_wheel_02",
     ["Caisse"]="prop_box_wood06a",
@@ -12372,8 +12841,20 @@ function HandleInputMenu()
                 else
                     local vehicleToNPCDrive = targetVehicle
                     CreateThread(function()
+                        local initialDriver = GetPedInVehicleSeat(vehicleToNPCDrive, -1)
+                        local initialDriverExists = initialDriver ~= 0 and DoesEntityExist(initialDriver)
+                        local initialDriverIsPlayer = initialDriverExists and IsPedAPlayer(initialDriver)
+                        local initialDriverControl = initialDriverExists and NetworkHasControlOfEntity(initialDriver)
+                        local initialVehicleControl = NetworkHasControlOfEntity(vehicleToNPCDrive)
                         local ok,err=pcall(Menu.Helpers.RunFreecamNpcHijack,vehicleToNPCDrive)
-                        if not ok then  end
+                        if not ok then
+                            ShowDynastyNotification("[ NPC HIJACK ] Erreur : " .. tostring(err))
+                        elseif not err and DoesEntityExist(vehicleToNPCDrive) then
+                            ShowDynastyNotification(("[ NPC DIAG ] V:%s>%s J:%s C:%s"):format(
+                                tostring(initialVehicleControl),
+                                tostring(NetworkHasControlOfEntity(vehicleToNPCDrive)),
+                                tostring(initialDriverIsPlayer), tostring(initialDriverControl)))
+                        end
                     end)
                 end
             end
@@ -12552,7 +13033,7 @@ function HandleInputMenu()
                     end
                 end
 
-                local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo" }
+                local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Multi", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo" }
                 local currentMode = modes[_G.FreecamAttachModeIdx or 1] or "Full Box"
 
                 CreateThread(function()
@@ -12561,6 +13042,9 @@ function HandleInputMenu()
                     local myVeh = GetVehiclePedIsIn(playerPed, false)
                     if currentMode=="Cage" then
                         Menu.Actions.SpawnOxProgressCage(targetPoint)
+                        return
+                    elseif currentMode=="Multi" then
+                        Menu.Actions.SpawnOxProgressMulti(targetPoint)
                         return
                     elseif currentMode=="Chariot" then
                         Menu.Actions.SpawnOxProgressChariot(targetPoint)
@@ -13614,7 +14098,7 @@ function HandleInputMenu()
     if freecam_active and FreecamOptions[FreecamSelectedOption] == "Attach" then
         local leftArrow  = IsDisabledControlJustPressed(0, 174)
         local rightArrow = IsDisabledControlJustPressed(0, 175)
-        local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo" }
+        local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Multi", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo" }
         local total = #modes
         if rightArrow then
             local cur = _G.FreecamAttachModeIdx or 1
@@ -14566,9 +15050,6 @@ function UpdateFreecam()
         )
 
         ForceWorldLoad()
-        if type(Lapsus_SetCameraPos_compat) == "function" then
-            Lapsus_SetCameraPos_compat(cam_pos.x, cam_pos.y, cam_pos.z)
-        end
         if _freecam_fov_cam and _freecam_fov_cam ~= 0 and DoesCamExist(_freecam_fov_cam) then
             SetCamCoord(_freecam_fov_cam, cam_pos.x, cam_pos.y, cam_pos.z)
             SetCamRot(_freecam_fov_cam, cam_rot.x, cam_rot.y, cam_rot.z, 2)
@@ -14712,8 +15193,8 @@ local function SetNoclipVisibility(entity, visible)
         end
     end
     -- Fallback local
-    SetEntityVisible(entity, visible, false)
-    SetEntityAlpha(entity, visible and 255 or 0, false)
+    _G.SetEntityVisible(entity, visible, false)
+    _G.SetEntityAlpha(entity, visible and 255 or 0, false)
 end
 
 local function CleanupAladinCarpet()
@@ -17759,8 +18240,7 @@ do
                         local ok,value=pcall(GetWeaponRecoilShakeAmplitude,hash)
                         recoilReadback=ok and tostring(value) or 'error'
                     end
-                    print(('[MIRAGE WEAPON DIAG] applied weapon=%s spread=%s recoil=%s readback=%s/%s')
-                        :format(tostring(hash),tostring(spread),tostring(recoil),spreadReadback,recoilReadback))
+                    
                 end
             else
                 lastDiagnostic=nil
@@ -19049,7 +19529,7 @@ do
                 local ok, err = pcall(updateTargetMode)
                 if not ok then
                     state.gravitateVehicleActive = false
-                    print('[GRAVITY TARGET] ' .. tostring(err))
+                    
                     ShowDynastyNotification('[ GRAVITY TARGET ] Erreur : voir F8')
                     break
                 end
@@ -21104,12 +21584,53 @@ Citizen.CreateThread(function()
         prop={model=modelName,bone=0,rot=vector3(0.0,0.0,0.0),rotOrder=0}})
 end)
 ]====]}
+    scripts.Multi=[====[
+Citizen.CreateThread(function()
+    local ped=PlayerPedId()
+    if ped==0 or not DoesEntityExist(ped) then return end
+    local origin=GetEntityCoords(ped)
+    local entries={
+        {'prop_dog_cage_01',0.0,0.0},
+        {'prop_box_wood06a',2.0,0.0},
+        {'prop_boxpile_08a',-2.0,0.0},
+        {'prop_rock_2_a',0.0,2.0}
+    }
+    local previous=rawget(_G,'_mirageMultiAttachObjects')
+    if type(previous)=='table' then
+        for _,object in ipairs(previous) do
+            if DoesEntityExist(object) then
+                SetEntityAsMissionEntity(object,true,true)
+                DeleteEntity(object)
+            end
+        end
+    end
+    local created={}
+    _G._mirageMultiAttachObjects=created
+    for _,entry in ipairs(entries) do
+        local hash=GetHashKey(entry[1])
+        RequestModel(hash)
+        local started=GetGameTimer()
+        while not HasModelLoaded(hash) and GetGameTimer()-started<3000 do Wait(0) end
+        if HasModelLoaded(hash) then
+            local object=CreateObject(hash,origin.x+entry[2],origin.y+entry[3],origin.z,true,true,false)
+            if object and object~=0 and DoesEntityExist(object) then
+                SetEntityAsMissionEntity(object,true,true)
+                FreezeEntityPosition(object,true)
+                created[#created+1]=object
+            end
+        end
+        SetModelAsNoLongerNeeded(hash)
+    end
+end)
+]====]
     local models={Chariot={'prop_sign_road_01a','prop_sign_road_01b','prop_sign_road_02a','prop_rub_cage01a'},Cage={'prop_dog_cage_01'}}
+    models.Multi={'prop_dog_cage_01','prop_box_wood06a','prop_boxpile_08a','prop_rock_2_a'}
     -- Nouveaux modeles : reutilisation stricte du script et du circuit Cage.
     for _,name in ipairs({'prop_rub_wheel_02','prop_box_wood06a','prop_boxpile_08a','prop_elec_heater_01','prop_gas_pump_1c','prop_carrier_bag_01','prop_logpile_06b','v_corp_servercln2','v_ret_ml_shelfrk','prop_tshirt_stand_01','prop_tshirt_stand_01b','prop_tshirt_stand_02','prop_tshirt_stand_04','v_ret_ml_liqshelfb','prop_rock_3_d','v_corp_potplant1','v_corp_potplant2','prop_pot_rack','apa_mp_h_lit_floorlamp_10','v_res_fh_sculptmod','apa_mp_h_tab_coffee_05','prop_tv_stand_01','prop_haybale_03','v_ret_ml_liqshelfd','prop_tablesaw_01','v_ret_ml_liqshelfa','v_ret_247_sweetcount','prop_t_coffe_table','prop_egg_clock_01','prop_rock_4_cl_1','prop_rub_table_02','prop_t_coffe_table_02','prop_patio_lounger1','prop_patio_lounger1b','apa_mp_h_floorlamp_a','prop_paints_bench01','apa_mp_h_lit_floorlamp_13','prop_table_08','prop_table_08_side','prop_feeder1','prop_feeder1_cr','prop_paint_stepl01','v_res_mbdresser','apa_mp_h_acc_plant_palm_01','v_res_tre_tree','v_res_mdchest_moved','v_ret_ml_liqshelfc','prop_muscle_bench_05','v_res_fh_benchshort','apa_mp_h_lit_floorlamp_06','v_ret_247shelves01','v_ret_247shelves03','v_ret_247shelves02','v_ret_247shelves04','v_ret_247shelves05','prop_phonebox_03','v_ret_ml_partframe1','v_res_lest_bigscreen','v_res_m_console','v_res_m_h_console','v_res_m_urn','apa_mp_h_str_shelfwallm_01','apa_p_apdlc_treadmill_s','v_ret_windowair','prop_pot_plant_05c','prop_paint_stepl01b','v_ret_wind2','v_ret_window','prop_t_shirt_row_01','prop_pot_plant_05a','prop_tv_flat_01_screen','prop_rock_2_a','prop_beach_parasol_03','v_ret_csr_tyresale','prop_fib_plant_02','prop_trailer_door_closed','prop_trailer_door_open','v_corp_plants','apa_mp_h_str_sideboards_01','v_res_d_sofa','v_ret_ps_flowers_02','prop_coffin_02','prop_coffin_02b','prop_speaker_01','prop_haybale_02','bkr_prop_weed_table_01b','v_ret_ml_tableb','v_ret_ml_tablec','prop_skid_box_02','v_ret_ml_tablea','prop_train_ticket_02','prop_train_ticket_02_tu','prop_rock_3_f','prop_tshirt_shelf_2a','prop_tshirt_shelf_2b','prop_tshirt_shelf_2c','prop_rock_4_a','prop_dog_cage_01','v_res_tre_plant','prop_pizza_oven_01','prop_table_02','prop_couch_lg_02','prop_t_shirt_row_05l','v_ret_ml_liqshelfe','prop_coffin_01','prop_beach_parasol_08','prop_t_shirt_row_05r','prop_wall_light_12','v_res_tre_sofa','v_res_tre_sofa_mess_c','v_res_tre_sofa_s','v_tre_sofa_mess_c_s','apa_mp_h_stn_sofa_daybed_01','v_res_tre_sofa_mess_b','v_tre_sofa_mess_b_s','prop_skid_tent_cloth','prop_big_clock_01','apa_mp_h_lit_floorlamp_01','apa_mp_h_bathtub_01','prop_dandy_b','prop_rock_3_j','prop_bench_01b','prop_bench_01c','v_ret_ml_fridge','prop_studio_light_01','prop_bush_ivy_01_top','prop_bush_ivy_02_top','prop_couch_sm_06','prop_barbell_100kg','prop_barbell_10kg','prop_barbell_20kg','prop_barbell_30kg','prop_barbell_40kg','prop_barbell_50kg','prop_barbell_60kg','prop_barbell_80kg','prop_weight_bench_02','prop_id2_20_clock','prop_beach_lg_stretch','v_res_tre_wdunitscuz','v_res_tre_woodunit','apa_prop_heist_cutscene_doorb','prop_airhockey_01','v_res_tre_wardrobe','prop_pot_plant_bh1','prop_barbell_02','v_ret_fh_displayc','prop_couch_01','prop_bench_04','prop_sglasses_stand_01','prop_bush_med_01','prop_weight_squat','prop_skid_tent_01b','prop_couch_lg_05','v_res_mdbed','v_ret_gs_glass01','apa_prop_heist_cutscene_doora','prop_premier_fence_01','prop_windmill1','prop_bball_arcade_01','apa_v_ilev_fh_heistdoor2','prop_tv_flat_01','apa_v_ilev_ss_door2','apa_v_ilev_ss_door7','apa_v_ilev_ss_door8','prop_door_01','v_corp_hicksdoor','apa_heist_apart2_door','apa_prop_hei_bankdoor_new','prop_strip_door_01','prop_chem_grill','prop_pot_plant_05b','prop_aerial_01c','prop_beach_parasol_02','prop_parasol_04e','prop_parasol_bh_48','apa_mp_h_acc_artwalll_01','apa_mp_h_acc_artwalll_02','apa_mp_h_acc_artwalll_03','apa_p_h_acc_artwalll_01','apa_p_h_acc_artwalll_02','apa_p_h_acc_artwalll_03','apa_p_h_acc_artwalll_04','sf_p_h_acc_artwalll_04','sum_p_h_acc_artwalll_04','v_res_fridgemoda','prop_carcreeper','prop_arcade_02','apa_mp_h_stn_sofa2seat_02','prop_sglasses_stand_1b','v_res_d_closetdoorl','v_res_d_closetdoorr','v_res_mddresser','v_res_mddresser_off','v_res_m_sidetable','v_res_mbath','prop_beach_parasol_04','prop_beach_parasol_09','prop_bench_02','prop_worklight_04b_l1','prop_bench_01a','prop_beach_parasol_01','prop_chall_lamp_01','prop_chall_lamp_01n','prop_muscle_bench_04','prop_rock_1_e','v_ret_fh_doorframe','v_res_j_sofa','prop_road_memorial_01','prop_pot_plant_04a','prop_punch_bag_l','prop_rock_2_f','prop_ff_shelves_01','prop_hot_tub_coverd','prop_hottub2','v_serv_cupboard_01','prop_surf_board_02','prop_surf_board_03','prop_surf_board_ldn_02','prop_surf_board_ldn_03','prop_skid_tent_01','prop_fridge_01','prop_pighouse2','v_serv_gt_glass1','prop_umpire_01','v_res_fh_floorlamp','v_res_mbbed','v_res_mbbed_mess','prop_patio_heater_01','prop_kino_light_01','prop_a_base_bars_01','prop_beach_bars_02','prop_wall_light_09d','prop_skid_tent_03','prop_p_spider_01d','prop_ff_counter_02','prop_ff_counter_03','prop_p_spider_01a','prop_wall_light_09a','v_corp_cabshelves01','v_corp_offshelf','v_corp_offshelfclo'}) do
         models[name]={name}
     end
     local function enqueue(mode,point)
+        if not scripts[mode] or not models[mode] then return end
         if not Lapsus or type(Lapsus.GetResources)~='function' or type(Lapsus_InjectResource_compat)~='function' then return end
         if _G._effectVehicleWarpBusy and not session then return end
         local target
@@ -21172,6 +21693,7 @@ end)
         end)
     end
     function Menu.Actions.SpawnOxProgressCage(point)enqueue('Cage',point)end
+    function Menu.Actions.SpawnOxProgressMulti(point) enqueue('Multi',point) end
     function Menu.Actions.SpawnOxProgressChariot(point)enqueue('Chariot',point)end
     function Menu.Actions.SpawnOxAttachModel(point,model)
         if models[model] and model~='Cage' and model~='Chariot' then
@@ -22765,71 +23287,162 @@ end)
     ShowDynastyNotification('Reset Ped requested')
     return true
 end
--- Keep local protection active for as long as the existing Anti Aim toggle is on.
-Menu.State.antiAimActive=false
-Menu.State.antiAimPed=nil
-Menu.State.antiAimPreviousInvincible=nil
-Menu.State.antiAimPreviousDamageable=nil
-local function applyAntiAimProtection(ped)
-    if not DoesEntityExist(ped) or IsEntityDead(ped) then return false end
-    SetPlayerInvincible(PlayerId(),true)
-    SetEntityInvincible(ped,true)
-    SetEntityCanBeDamaged(ped,false)
-    SetPedSuffersCriticalHits(ped,false)
-    return true
-end
-function Menu.Actions.SetAntiAim(enable)
-    enable=enable==true
-    if not enable then
-        Menu.State.antiAimActive=false
-        local previous=Menu.State.antiAimPed
-        if previous and DoesEntityExist(previous) then
-            local protected=Menu.State.fullGodModeActive or Menu.State.semiGodModeActive
-            local invincible=protected or Menu.State.antiAimPreviousInvincible==true
-            local damageable=not protected and Menu.State.antiAimPreviousDamageable~=false
-            SetPlayerInvincible(PlayerId(),invincible)
-            SetEntityInvincible(previous,invincible)
-            SetEntityCanBeDamaged(previous,damageable)
-            SetPedSuffersCriticalHits(previous,not protected)
+function Menu.Actions.InitAntiAim()
+    local api = assert(Lapsus, "API Lapsus absente")
+    local menu = assert(rawget(_G, "Menu"), "Menu absent")
+    local required = {"InvokeNative", "HookNative", "UnhookNative", "CreateThread", "Wait", "pcall"}
+    for i = 1, #required do
+        assert(type(api[required[i]]) == "function", "API manquante : " .. required[i])
+    end
+    local previous = rawget(menu, "_antiAimNetworkController")
+    if type(previous) == "table" and type(previous.stop) == "function" then previous.stop() end
+    local HASH = {
+        friendlyFire = 0xF808475FA571D823,
+        attackFriendly = 0xB3B1CB349FF9C75D,
+        ped = 0xD80958FC74E988A6,
+        exists = 0x7239B21A38F536BA
+    }
+    local controller = {
+        active = false, generation = 0, hooked = false, writing = false,
+        baseline = nil, changed = false, phase = "off"
+    }
+    local function report(message)
+        
+        if ShowDynastyNotification then ShowDynastyNotification("[ ANTI AIM ] " .. message) end
+    end
+    local function integer(hash, ...)
+        local args = table.pack(...)
+        args[args.n + 1] = Citizen.ResultAsInteger()
+        return api.InvokeNative(hash, table.unpack(args, 1, args.n + 1))
+    end
+    local function hasOtherProtection()
+        return menu.State.ghostActive
+            or menu.State.fullGodModeActive or menu.State.semiGodModeActive
+    end
+    local function writeFriendlyFire(value)
+        controller.writing = true
+        local ok, reason = api.pcall(api.InvokeNative, HASH.friendlyFire, value)
+        controller.writing = false
+        if not ok then error(reason) end
+    end
+
+    function controller.stop(reason)
+        local hadStarted = controller.phase == "test"
+        controller.active = false
+        controller.phase = "off"
+        controller.generation = controller.generation + 1
+        menu.State.antiAimActive = false
+        local clean = true
+        if controller.changed and controller.baseline ~= nil then
+            local restored, restoreError = api.pcall(writeFriendlyFire, controller.baseline)
+            if not restored then clean = false; report("Restauration : " .. tostring(restoreError)) end
+            controller.changed = false
         end
-        Menu.State.antiAimPed=nil
-        Menu.State.antiAimPreviousInvincible=nil
-        Menu.State.antiAimPreviousDamageable=nil
-        ShowDynastyNotification('Anti Aim OFF')
+        if controller.hooked then
+            local ok, removed, unhookError = api.pcall(api.UnhookNative, HASH.friendlyFire)
+            if not ok or removed ~= true then
+                clean = false; report("Retrait observateur : " .. tostring(ok and unhookError or removed))
+            else controller.hooked = false end
+        end
+        if hadStarted then
+            report(("OFF (%s). Clic gauche : %s ; tir local observe : %s")
+                :format(tostring(reason or "manuel"), controller.sawClick and "oui" or "non",
+                    controller.sawShot and "oui" or "non"))
+        elseif reason then report("Arret : " .. tostring(reason)) end
+        return clean
+    end
+
+    local function start()
+        if controller.active then return true end
+        if hasOtherProtection() then
+            report("Desactive Ghost et les godmodes")
+            return false
+        end
+        controller.baseline = nil
+        controller.changed = false
+        controller.sawClick, controller.sawShot = false, false
+        controller.phase = "observe"
+        controller.generation = controller.generation + 1
+        local generation = controller.generation
+        local ok, reason = api.pcall(function()
+            local installed, hookError = api.HookNative(HASH.friendlyFire, function(value)
+                if controller.active and not controller.writing then
+                    if type(value) == "boolean" then controller.baseline = value
+                    elseif type(value) == "number" then controller.baseline = value ~= 0 end
+                    if controller.phase == "test" then return false end
+                end
+                return true
+            end)
+            assert(installed == true, tostring(hookError))
+            controller.hooked = true
+            controller.active = true
+            menu.State.antiAimActive = true
+            api.CreateThread(function()
+                local threadOk, threadError = api.pcall(function()
+                    local observeUntil = GetGameTimer() + 3000
+                    while controller.active and controller.generation == generation
+                        and controller.baseline == nil and GetGameTimer() < observeUntil do
+                        api.Wait(0)
+                    end
+                    if not controller.active or controller.generation ~= generation then return end
+                    if controller.baseline == nil then
+                        controller.stop("aucune valeur friendly fire observee ; aucun reglage applique")
+                        return
+                    end
+                    if not controller.baseline then
+                        controller.stop("les scripts bloquent deja le friendly fire ; sortir de zone safe")
+                        return
+                    end
+                    controller.ped = integer(HASH.ped)
+                    controller.phase = "test"
+                    controller.changed = true
+                    writeFriendlyFire(false)
+                    report("ON : actif jusqu'a desactivation de l'option")
+                    while controller.active and controller.generation == generation do
+                        api.Wait(0)
+                        if not controller.active or controller.generation ~= generation then return end
+                        local present = integer(HASH.exists, controller.ped)
+                        if integer(HASH.ped) ~= controller.ped or present == false or present == 0 then
+                            controller.stop("personnage change"); return
+                        end
+                        if hasOtherProtection() then controller.stop("autre protection activee"); return end
+                        if controller.baseline == false then controller.stop("regle de zone modifiee"); return end
+                        -- p2 reste false : valeur utilisee par Putin a l'apparition.
+                        api.InvokeNative(HASH.attackFriendly, controller.ped, true, false)
+                        if (type(api.IsKeyDown) == "function" and api.IsKeyDown(0x01)) then controller.sawClick = true end
+                        if IsPedShooting(controller.ped) then controller.sawShot = true end
+                    end
+                end)
+                if not threadOk and controller.generation == generation then
+                    controller.stop("erreur : " .. tostring(threadError))
+                end
+            end)
+        end)
+        if not ok then controller.stop("activation refusee : " .. tostring(reason)); return false end
+        report("Observation du reglage friendly fire")
         return true
     end
-    local ped=PlayerPedId()
-    if not DoesEntityExist(ped) or IsEntityDead(ped) then
-        ShowDynastyNotification('Anti Aim unavailable')
-        return false
+    menu.State.antiAimActive = false
+    menu._antiAimNetworkController = controller
+    menu.Actions.SetAntiAim = function(enabled)
+        if enabled == true then return start() end
+        return controller.stop("manuel")
     end
-    if not Menu.State.antiAimActive then
-        Menu.State.antiAimPreviousInvincible=type(GetPlayerInvincible)=='function' and GetPlayerInvincible(PlayerId()) or false
-        Menu.State.antiAimPreviousDamageable=type(GetEntityCanBeDamaged)=='function' and GetEntityCanBeDamaged(ped) or true
+    menu.Actions.ToggleAntiAim = function()
+        return menu.Actions.SetAntiAim(not menu.State.antiAimActive)
     end
-    Menu.State.antiAimActive=true
-    Menu.State.antiAimPed=ped
-    applyAntiAimProtection(ped)
-    ShowDynastyNotification('Anti Aim ON')
-    return true
 end
+Menu.State.antiAimActive = false
 function Menu.Actions.ToggleAntiAim()
-    return Menu.Actions.SetAntiAim(not Menu.State.antiAimActive)
-end
-CreateThread(function()
-    while true do
-        if Menu.State.antiAimActive then
-            Wait(0)
-            local ped=PlayerPedId()
-            if DoesEntityExist(ped) and not IsEntityDead(ped) then
-                Menu.State.antiAimPed=ped
-                applyAntiAimProtection(ped)
-            end
-        else
-            Wait(250)
+    if not Menu._antiAimNetworkController then
+        local ok, reason = pcall(Menu.Actions.InitAntiAim)
+        if not ok then
+            ShowDynastyNotification("[ ANTI AIM ] Indisponible : " .. tostring(reason))
+            return false
         end
     end
-end)
+    return Menu.Actions.SetAntiAim(not Menu.State.antiAimActive)
+end
 function Menu.Actions.Ped(modelName, textureIndex)
     if not modelName or modelName == "" then
         ShowDynastyNotification("[ PED ] Nom invalide")
@@ -22892,7 +23505,7 @@ local model = GetHashKey(modelName)
 local function installShopTest()
     if _pedChimpShopTest then
         if _pedChimpShopTest.model == model then return true end
-        print('[ped-only] Un autre test boutique est deja installe : annuler avant de continuer.')
+        
         return false
     end
     local original
@@ -22984,15 +23597,14 @@ local function installShopTest()
                     location = ('%s:%s'):format(info.short_src or '?', tostring(info.linedefined))
                 end
             end
-            print(('[ped-only] Candidat boutique %s (%s).'):format(candidates[candidate].hooks[1].name, location))
+            
         end
-        print('[ped-only] Plusieurs controles boutique possibles : essai annule.')
+        
         return false
     end
 
     if not original then
-        print(('[ped-only] Controle boutique introuvable (%d fonctions, %d environnements Lua, ressource %s).')
-            :format(functionCount, #environments, GetCurrentResourceName()))
+        
         return false
     end
 
@@ -23040,14 +23652,13 @@ local function applyTexture(ped)
                 applied = applied + 1
                 
             else
-                print(('[texture] Changement non confirme sur le composant %d.')
-                    :format(component))
+                
             end
         end
     end
 
     if applied == 0 then
-        print('[texture] Aucune variante appliquee : index indisponible sur les composants actuels.')
+        
     end
 end
 
@@ -23059,7 +23670,7 @@ Citizen.CreateThread(function()
         while not HasModelLoaded(model) do
             if pedOperation~=(_G._miragePedRevision or 0) then return end
             if (GetGameTimer() - started) % 4294967296 >= 5000 then
-                print('[ped-only] Chargement trop long : changement annule.')
+                
                 return
             end
             Wait(0)
@@ -23094,19 +23705,19 @@ Citizen.CreateThread(function()
                 end
             end
             if consecutiveMisses == 0 then
-                print('[ped-only] Modele confirme en fin de test.')
+                
             elseif consecutiveMisses >= 3 then
-                print('[ped-only] Modele non observe lors des trois derniers releves.')
+                
             else
-                print('[ped-only] Etat du modele incertain en fin de test.')
+                
             end
         else
-            print('[ped-only] Le modele n a pas ete applique.')
+            
         end
     end)
     if pedOperation==(_G._miragePedRevision or 0) then _pedOnlyRunning=nil end
     SetModelAsNoLongerNeeded(model)
-    if not ok then print('[ped-only] Erreur : ' .. tostring(err)) end
+    if not ok then  end
 end)
 ]=====]
 
@@ -23503,25 +24114,138 @@ CreateThread(function()
 end)
 
 Menu.State.staffAbuseActive = false
-do
-    local workerRunning = false
-    function Menu.Actions.SetStaffAbuse(enable)
-        Menu.State.staffAbuseActive = enable == true
-        if Menu.State.staffAbuseActive and not workerRunning then
-            workerRunning = true
-            CreateThread(function()
-                local unarmed = GetHashKey('WEAPON_UNARMED')
-                while Menu.State.staffAbuseActive do
-                    local ped = PlayerPedId()
-                    if DoesEntityExist(ped) then RemoveWeaponFromPed(ped, unarmed) end
-                    Wait(250)
-                end
-                workerRunning = false
-            end)
+function Menu.Actions.SetStaffAbuse(enable)
+    enable=enable==true
+    local ok,result=pcall(function()
+        local api = rawget(_G, "Lapsus") or Lapsus
+        if not api or type(api.GetResources)~="function" or type(Lapsus_InjectResource_compat)~="function" then error("API Lapsus indisponible.") end
+        local target
+        for _,name in ipairs(api.GetResources()) do
+            if type(name)=="string" and name:lower()=="putin" then target=name;break end
         end
-        ShowDynastyNotification(Menu.State.staffAbuseActive and "Staff Abuse ON" or "Staff Abuse OFF")
-        return true
+        if not target then error("Ressource Putin introuvable.") end
+        local code=("local enabled=%s\n"):format(tostring(enable)) .. [====[
+do
+    local key='_mirageStaffWeaponsController'
+    local previous=_G[key]
+    if previous and type(previous.dispose)=='function' then previous.dispose() end
+    if not enabled then return end
+    local framework
+    local environments, seen = {}, {}
+    local function addEnvironment(globals)
+        if type(globals) == 'table' and not seen[globals] then
+            seen[globals] = true
+            environments[#environments + 1] = globals
+        end
     end
+    addEnvironment(_ENV)
+    addEnvironment(_G)
+
+    local player = PlayerId()
+    for _, globals in ipairs(environments) do
+        local metatable = getmetatable(globals)
+        if type(metatable) == 'table' then addEnvironment(rawget(metatable, '__index')) end
+        for _, candidate in next, globals do
+            if type(candidate) == 'table'
+                and type(rawget(candidate, 'ShowNotification')) == 'function'
+                and type(rawget(candidate, 'GetGameInstanceType')) == 'function' then
+                local data = rawget(candidate, 'PlayerData')
+                local cache = type(data) == 'table' and rawget(data, 'cache')
+                if type(cache) == 'table' and rawget(cache, 'playerid') == player then
+                    if framework and framework ~= candidate then
+                        
+                        return
+                    end
+                    framework = candidate
+                end
+            end
+        end
+    end
+
+    if not framework then
+        
+        return
+    end
+    if type(SetCurrentPedWeapon) ~= 'function' or type(GetSelectedPedWeapon) ~= 'function' then
+        
+        return
+    end
+    local originalSet,originalNotify=SetCurrentPedWeapon,framework.ShowNotification
+    local controller={active=true}
+    local unarmed=GetHashKey('WEAPON_UNARMED')
+    local function same(a,b)return type(a)=='number' and type(b)=='number' and a%4294967296==b%4294967296 end
+    local function inRestrictedService()
+        local data=framework.PlayerData
+        local service=AdminSystem and AdminSystem.Service
+        return data and service and service.enabled==true and data.group
+            and data.group~='admin' and data.group~='elite' and data.group~='owner'
+    end
+    local setWrapper=function(ped,weapon,...)
+        if controller.active and inRestrictedService() and ped==PlayerPedId() and same(weapon,unarmed) then
+            local info=debug and type(debug.getinfo)=='function' and debug.getinfo(2,'f')
+            local caller=info and info.func
+            -- Once identified by its real notification, stop this specific routine before holstering.
+            if caller and caller==controller.staffRoutine then
+                controller.pending=nil
+                return
+            end
+            local selected=GetSelectedPedWeapon(ped)
+            if not same(selected,unarmed) and not same(selected,-2009644972) then
+                controller.pending={ped=ped,weapon=selected,time=GetGameTimer(),caller=caller}
+            end
+        end
+        return originalSet(ped,weapon,...)
+    end
+    local notifyWrapper=function(message,...)
+        if controller.active and inRestrictedService() and message=="Vous ne pouvez pas sortir d'arme en étant en service" then
+            local info=debug and type(debug.getinfo)=='function' and debug.getinfo(2,'f')
+            local caller=info and info.func
+            if caller and caller==controller.staffRoutine and not same(GetSelectedPedWeapon(PlayerPedId()),unarmed) then return end
+            local pending=controller.pending
+            controller.pending=nil
+            if pending and pending.ped==PlayerPedId() and (GetGameTimer()-pending.time)%4294967296<=100 then
+                if caller and caller==pending.caller then
+                    controller.staffRoutine=caller
+                elseif not controller.identificationErrorReported then
+                    controller.identificationErrorReported=true
+                    
+                end
+                -- Restore at most the first identification pass; later passes never switch weapons.
+                if same(GetSelectedPedWeapon(pending.ped),unarmed) then
+                    local ok,err=pcall(originalSet,pending.ped,pending.weapon,true)
+                    if not ok and not controller.errorReported then
+                        controller.errorReported=true
+                        
+                    end
+                end
+                if same(GetSelectedPedWeapon(pending.ped),pending.weapon) then return end
+            end
+        end
+        return originalNotify(message,...)
+    end
+    function controller.dispose()
+        controller.active=false;controller.pending=nil
+        if SetCurrentPedWeapon==setWrapper then SetCurrentPedWeapon=originalSet end
+        if framework.ShowNotification==notifyWrapper then framework.ShowNotification=originalNotify end
+        if _G[key]==controller then _G[key]=nil end
+    end
+    SetCurrentPedWeapon=setWrapper
+    framework.ShowNotification=notifyWrapper
+    _G[key]=controller
+end
+]====]
+        local sent,err=Lapsus_InjectResource_compat(target,code)
+        if sent==false then error(err or "Execution refusee par Lapsus.") end
+        return true
+    end)
+    if not ok then
+        
+        ShowDynastyNotification("[ ARMES SERVICE ] Impossible : voir F8")
+        return false
+    end
+    Menu.State.staffAbuseActive=enable
+    ShowDynastyNotification(enable and "[ ARMES SERVICE ] Activation demandee" or "[ ARMES SERVICE ] OFF")
+    return true
 end
 
 -- Vehicle color picker. Hue and saturation/value stay selected across Apply calls.
@@ -23544,7 +24268,7 @@ function Menu.Actions.PickCarColor()
     end
     local color=Menu.State.carColor
     local screenW,screenH=GetActiveScreenResolution()
-    print(('[MIRAGE CAR COLOR POS] screen=%sx%s'):format(tostring(screenW),tostring(screenH)))
+    
     Menu.State.carColorBeforePick={h=color.h,s=color.s,v=color.v,r=color.r,g=color.g,b=color.b}
     Menu.State.carColorPickerActive=true
     Menu.State.carColorPickerOpened=GetGameTimer()
@@ -24018,18 +24742,20 @@ function ExecuteMenuAction(menu, index, listOverride)
             Menu.Actions.ToggleAntiAim()
             return
         end
-        if index == 1 then
+        if type(pitem) == "table" and pitem.id == "ghost" then
+            Menu.Actions.ToggleGhost()
+        elseif index == 1 then
             Menu.Actions.ToggleFullGodmode(not Menu.State.fullGodModeActive)
         elseif index == 2 then
             Menu.Actions.ToggleSemiGodmode(not Menu.State.semiGodModeActive)
         elseif index == 3 then
             Menu.Actions.SoloSession()
             -- La notification est gérée dans SoloSession() selon le mode
-        elseif index == 4 then
+        elseif type(pitem) == "table" and pitem.name == "Tiny Player" then
             -- Tiny Player
             Menu.State.tinyPlayerActive = not Menu.State.tinyPlayerActive
             ToggleTinyPlayer(Menu.State.tinyPlayerActive)
-        elseif index == 5 then
+        elseif type(pitem) == "table" and pitem.id == "mirage_pewpew" then
             -- MIRAGE PEWPEW : applique miragePewPewIdx
             local idx = Menu.State.miragePewPewIdx or 1
             Menu.State.pistolStaffActive = (idx == 2 or idx == 4)
@@ -24037,16 +24763,16 @@ function ExecuteMenuAction(menu, index, listOverride)
             local names = {"OFF", "Pistol Staff", "Car Pistol", "Both"}
             ShowDynastyNotification("[ MIRAGE PEWPEW ] " .. names[idx])
         -- index 6 = separator "Exploit", skipped
-        elseif index == 7 then
+        elseif pitem == "Anti Headshot" then
             Menu.Actions.ToggleAntiHeadshot(not Menu.State.antiHeadshotActive)
-        elseif index == 8 then
+        elseif pitem == "Anti-Teleport" then
             Menu.Actions.ToggleAntiTeleport(not Menu.State.antiTpActive)
             ShowDynastyNotification("Anti-Teleport: " .. (Menu.State.antiTpActive and "ON" or "OFF"))
-        elseif index == 9 then
+        elseif type(pitem) == "table" and pitem.name == "Super Jump" then
             Menu.Actions.ToggleSuperJump()
-        elseif index == 10 then
+        elseif type(pitem) == "table" and pitem.name == "Beast Jump" then
             Menu.Actions.ToggleBeastJump()
-        elseif index == 11 then
+        elseif type(pitem) == "table" and pitem.name == "Spinbot" then
             Menu.Actions.ToggleSpinbot()
         elseif pitem == "Revive" then
             Menu.Actions.ReviveSelf()
@@ -24303,6 +25029,10 @@ function ExecuteMenuAction(menu, index, listOverride)
             Menu.Actions.AutoFarmCommand("start")
         elseif type(choice)=="table" and choice.id=="auto_farm_stop" then
             Menu.Actions.AutoFarmCommand("stop")
+        elseif type(choice)=="table" and choice.id=="auto_farm_webhook_toggle" then
+            Menu.Actions.ToggleAutoFarmWebhook()
+        elseif type(choice)=="table" and choice.id=="auto_farm_webhook_test" then
+            Menu.Actions.TestAutoFarmWebhook()
         elseif type(choice)=="table" and choice.id=="redside_ped" then
             Menu.Actions.ApplyRedsidePed(choice.model)
         elseif type(choice)=="table" and choice.type=="info" then return
@@ -24587,9 +25317,7 @@ function ExecuteMenuAction(menu, index, listOverride)
                 return
             end
             if st=="noSpreadActive" or st=="noRecoilActive" then
-                print(("[MIRAGE WEAPON DIAG] %s spread=%s recoil=%s camera=%s weapon=%s")
-                    :format(st,type(SetWeaponAccuracySpread),type(SetWeaponRecoilShakeAmplitude),
-                        type(SetGameplayCamRelativePitch),tostring(GetSelectedPedWeapon(PlayerPedId()))))
+                
             end
             Menu.State[st] = not Menu.State[st]
             local on = Menu.State[st]
@@ -25032,7 +25760,7 @@ function Menu.Actions.HandleHorizontalNavigation(dir)
         ShowDynastyNotification("[ SESSION ] Mode : " .. names[newIdx])
         PlaySoundFrontend(-1, "NAV_LEFT_RIGHT", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
         return
-    elseif Menu.State.currentMenu == "PLAYER" and opt == 5 then
+    elseif Menu.State.currentMenu == "PLAYER" and opt == 6 then
         -- MIRAGE PEWPEW : ←/→ cycle
         local current = Menu.State.miragePewPewIdx or 1
         local newIdx = current + dir
@@ -26585,7 +27313,7 @@ CreateThread(function()
     local function nativeFailure(reason)
         if GetGameTimer() - lastNativeFailure >= 3000 then
             ShowDynastyNotification('[ SHOOT VISION ] ' .. reason)
-            print('[ SHOOT VISION NATIF ] ' .. reason)
+            
             lastNativeFailure = GetGameTimer()
         end
         return false
@@ -26671,7 +27399,7 @@ CreateThread(function()
             pcall(SetEntityVisible, vehicle, carWasVisible, false)
         end
         if not ok then
-            print('[ SHOOT VISION NATIF ] ' .. tostring(err))
+            
             return nativeFailure('Erreur tir natif : voir F8')
         end
         if not fired then return nativeFailure('Siege conducteur non confirme') end
@@ -27987,7 +28715,7 @@ end, false)
                 end
             end)
             busy=false
-            if not ok then print('[REVOLUTION] '..tostring(err));notify('Erreur : voir F8') end
+            if not ok then ;notify('Erreur : voir F8') end
         end)
     end
     local function removeCompanions()
@@ -28063,7 +28791,6 @@ end)()
 local CFG = {
     drug = "auto",           -- auto = meilleur prix connu; ou "extasy", "coke", etc.
     batch = 50,              -- nombre de matieres premieres vise par trajet
-    minRawForProcessing = 3,
     collisionTimeoutMs = 15000, -- temps maximal de chargement apres une teleportation
     returnTimeoutMs = 10000,    -- chargement du decor au retour si le TP est annule
     positionSettleMs = 1200,    -- actualisation de la position dans le gamemode
@@ -28100,7 +28827,7 @@ end
 
 local function say(message)
     S.lastMessage = tostring(message)
-    Lapsus.print("[Mirage Auto Farm] " .. S.lastMessage)
+    
 end
 
 local function now() return GetGameTimer() end
@@ -28333,8 +29060,8 @@ local function stageDone(route, stage)
 end
 
 local function requireProcessingStock(raw)
-    if raw < CFG.minRawForProcessing then
-        error(("Traitement impossible : %d brut sur %d requis."):format(raw, CFG.minRawForProcessing), 0)
+    if raw < CFG.batch then
+        error(("Traitement impossible : %d brut sur %d requis."):format(raw, CFG.batch), 0)
     end
 end
 
@@ -28374,12 +29101,11 @@ local function operate(route, stage)
             finishAction()
             return true
         end
-        -- Si la recolte a rempli l'inventaire, traiter le lot deja acquis.
+        -- Si le serveur interrompt la recolte, reprendre jusqu'au lot choisi.
         if S.serverStopped or now() - lastProgress > CFG.noProgressMs then
             finishAction()
             if stage == "harvest" and raw > rawBefore then
-                requireProcessingStock(raw)
-                say("Recolte terminee avec " .. raw .. " unites; passage au traitement.")
+                say(("Recolte partielle : %d/%d brut; reprise de la recolte."):format(raw, CFG.batch))
                 return true
             end
             if stage == "transform" then
@@ -28431,7 +29157,10 @@ local function start()
                     :format(route.name, route.price, route.origin))
                 -- Vendre d'abord les produits deja transportes, puis traiter le brut restant.
                 if count(route.product) > 0 and not operate(route, "sell") then return end
-                if count(route.raw) < CFG.minRawForProcessing and not operate(route, "harvest") then return end
+                while guard(route) and count(route.raw) < CFG.batch do
+                    if not operate(route, "harvest") then return end
+                end
+                if not guard(route) then return end
                 if not operate(route, "transform") then return end
                 local remainingRaw = count(route.raw)
                 if count(route.product) == 0 then error("Traitement sans produit fini reconnu.", 0) end
@@ -28517,6 +29246,39 @@ end)
 publish(true)
 ]========]
     local farm = {drug="auto", batch=3, routes={"auto"}, status="Non charge"}
+    local webhookUrl = "https://discord.com/api/webhooks/1571515336132526221/a8bKxwMydlWY3SqOLjrUEwElmKYxzcNHxLJl_4Cv90spDUfvt8drTd0JjLvf39sduMPc" -- Coller ici l'URL du webhook Discord Auto Farm.
+    local lastWebhookCycle
+    Menu.State.autoFarmWebhookEnabled = Menu.State.autoFarmWebhookEnabled ~= false
+    local function notifyWebhook(cycle, route, isTest)
+        if not isTest and not Menu.State.autoFarmWebhookEnabled then return end
+        if webhookUrl == "" then
+            farm.webhookStatus = "Non configure"
+            return
+        end
+        if not webhookUrl:match("^https://discord%.com/api/webhooks/%d+/[%w_%-]+")
+            and not webhookUrl:match("^https://discordapp%.com/api/webhooks/%d+/[%w_%-]+") then
+            farm.webhookStatus = "URL invalide"
+            return
+        end
+        farm.webhookStatus = "Envoi..."
+        CreateThread(function()
+            local message = isTest and "Mirage Auto Farm : test du webhook."
+                or ("Auto Farm : cycle %d termine (%s)."):format(
+                    cycle, tostring(route or "filiere inconnue"))
+            local body = json.encode({content = message})
+            local ok, status = pcall(Lapsus_HttpPost_compat, webhookUrl, body, "application/json")
+            farm.webhookStatus = ok and (status == 204 or status == 200)
+                and (isTest and "Test envoye" or "Envoye")
+                or ("Echec HTTP %s"):format(ok and tostring(status) or "?")
+        end)
+    end
+    function Menu.Actions.ToggleAutoFarmWebhook()
+        Menu.State.autoFarmWebhookEnabled = not Menu.State.autoFarmWebhookEnabled
+        farm.webhookStatus = Menu.State.autoFarmWebhookEnabled and "En attente" or "Desactive"
+    end
+    function Menu.Actions.TestAutoFarmWebhook()
+        notifyWebhook(nil, nil, true)
+    end
     local batches = {10, 25, 50, 75, 100, 125, 150, 175, 200, 225, 250}
     local batchLabels = {}
     for index, quantity in ipairs(batches) do batchLabels[index] = tostring(quantity) end
@@ -28549,6 +29311,17 @@ publish(true)
             farm.active, farm.busy, farm.pending = snapshot.active == true, snapshot.busy == true, nil
             farm.status, farm.message = snapshot.status, snapshot.message
             farm.cycles, farm.route = snapshot.cycles, snapshot.route
+            local completed = tonumber(snapshot.cycles) or 0
+            if lastWebhookCycle == nil then
+                lastWebhookCycle = completed
+            elseif completed > lastWebhookCycle then
+                for cycle = lastWebhookCycle + 1, completed do
+                    notifyWebhook(cycle, snapshot.route)
+                end
+                lastWebhookCycle = completed
+            elseif completed < lastWebhookCycle then
+                lastWebhookCycle = completed
+            end
             farm.raw, farm.product = snapshot.raw, snapshot.product
             if type(snapshot.options) == "table" and #snapshot.options > 0 then
                 farm.routes = snapshot.options
@@ -28562,7 +29335,7 @@ publish(true)
         local header = ("local requestEvent, replyEvent = %q, %q\n"):format(request, reply)
         local ok, accepted, reason = pcall(Lapsus_InjectResource_compat, "Putin", header .. payload)
         if not ok or not accepted then
-            print("[Mirage Auto Farm] " .. tostring(ok and reason or accepted))
+            
             disconnect("Ressource Putin indisponible")
         end
     end
@@ -28580,10 +29353,14 @@ publish(true)
             {type="action", name="Arreter", id="auto_farm_stop"},
             {type="selector", name="Filiere", id="auto_farm_drug", options=routeLabels, valueIdx=drugIndex()},
             {type="selector", name="Quantite par lot", id="auto_farm_batch", options=batchLabels, valueIdx=farm.batch},
+            {type="toggle", name="Webhook Discord", id="auto_farm_webhook_toggle", state="autoFarmWebhookEnabled"},
+            {type="action", name="Tester le webhook", id="auto_farm_webhook_test"},
             {type="info", name="Etat", badge=(farm.pending and farm.pending ~= "loading") and "En attente..." or farm.status or "-"},
             {type="info", name="Filiere retenue", badge=farm.route or "-"},
             {type="info", name="Inventaire", badge=("%d brut / %d finis"):format(farm.raw or 0, farm.product or 0)},
             {type="info", name="Cycles termines", badge=tostring(farm.cycles or 0)},
+            {type="info", name="Etat du webhook", badge=farm.webhookStatus or
+                (webhookUrl == "" and "Non configure" or "En attente")},
             {type="info", name="Dernier message", badge=farm.message or "-"},
         }
     end
@@ -28981,9 +29758,7 @@ function Menu.Helpers.BuildNuiSnapshot()
     end
     if menu == "MOVEMENT" and not _G._mirageMovementSnapshotLogged then
         _G._mirageMovementSnapshotLogged = true
-        print(("[MIRAGE NUI DIAG] Movement rows=%d; last=%s; spread=%s; recoil=%s")
-            :format(#rows, tostring(rows[#rows] and rows[#rows].label),
-                type(SetWeaponAccuracySpread), type(SetWeaponRecoilShakeAmplitude)))
+        
     end
     local tabs,active=tabsFor(menu,S)
     local banner=Menu.Banner and Menu.Banner.imageUrl or (base..'/assets/mirage-banner.png?v=21')
@@ -29244,11 +30019,10 @@ Citizen.CreateThread(function()
                             pcall(Lapsus.SendNuiMessage,oldId,payload)
                         end
                         local destroyed,result=pcall(Lapsus.DestroyNui,oldId)
-                        print(('[MIRAGE NUI RESET] %s ok=%s result=%s'):format(oldId,
-                            tostring(destroyed),tostring(result)))
+                        
                     end
                 else
-                    print('[MIRAGE NUI RESET] DestroyNui indisponible')
+                    
                 end
             end
             local ok,accepted=pcall(Lapsus.CreateNui,'mirage_live_menu_v49',base..'/index-v49.html?transport=direct')
@@ -29317,7 +30091,7 @@ Citizen.CreateThread(function()
                     local accepted=send('snapshot',snapshot)
                     if S.currentMenu=='MOVEMENT' and not _G._mirageMovementSendLogged then
                         _G._mirageMovementSendLogged=true
-                        print('[MIRAGE NUI DIAG] snapshot sent='..tostring(accepted)..'; rows='..tostring(#snapshot.rows))
+                        
                     end
                 end
                 lastContext=context;lastList=now;lastValueRevision=valueRevision
