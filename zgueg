@@ -1,6 +1,6 @@
 -- Renseigne le domaine public Railway, sans chemin.
 _G.MirageNuiBaseUrl = "https://nuirepo-production.up.railway.app"
-print('[MIRAGE SHIFT DIAG v1] fichier charge; deja actif='..tostring(_G._mirageMenuRunning==true))
+
 if not _G._mirageShiftDiagRunning then
     _G._mirageShiftDiagRunning=true
     CreateThread(function()
@@ -19,11 +19,7 @@ if not _G._mirageShiftDiagRunning then
                         bindCount=bindCount+1
                     end
                 end
-                print(('[MIRAGE SHIFT DIAG v1] gravity=%s mode=%s boost=%s rocket=%s roadster=%s easy=%s legacy=%s shiftBinds=%d')
-                    :format(tostring(state.gravitateVehicleActive),tostring(state.gravitateVehicleMode),
-                        tostring(state.shiftBoostActive),tostring(state.rocketCarActive),
-                        tostring(state.roadsterActive),tostring(state.easyHandlingActive),
-                        tostring(_G.PqLmYgZxWvTrHs),bindCount))
+                
                 _G._mirageShiftDiagRunning=false
                 return
             end
@@ -61,11 +57,11 @@ if _G._mirageMenuRunning then
         local menu = rawget(_G, 'Menu')
         if type(menu) ~= 'table' or type(menu.State) ~= 'table'
             or type(menu.Helpers) ~= 'table' or type(menu.Actions) ~= 'table' then
-            print('[Mirage hotfix] Menu actif introuvable. Charge lapsus_fixed.lua d abord.')
+            
             return
         end
         if _G._mirageTpWeaponHotfix then
-            print('[Mirage hotfix] Deja actif; Movement a ' .. #menu.Helpers.GetMovementOptions() .. ' lignes.')
+            
             return
         end
 
@@ -89,7 +85,7 @@ if _G._mirageMenuRunning then
         menu.Actions.TpWay = function()
             local blip = GetFirstBlipInfoId(8)
             if not blip or blip == 0 or not DoesBlipExist(blip) then
-                print('[Mirage hotfix] Place un waypoint.')
+                
                 return false
             end
             local target = GetBlipInfoIdCoord(blip)
@@ -104,11 +100,11 @@ if _G._mirageMenuRunning then
                 Wait(0)
             end
             if not found then
-                print('[Mirage hotfix] Sol non charge; TP annule.')
+                
                 return false
             end
             SetEntityCoordsNoOffset(entity, target.x, target.y, ground + 1.0, false, false, false)
-            print('[Mirage hotfix] TP Way effectue.')
+            
             return true
         end
 
@@ -128,9 +124,7 @@ if _G._mirageMenuRunning then
         end
 
         _G._mirageTpWeaponHotfix = true
-        print(('[Mirage hotfix] Actif; Movement=%d; spread=%s; recoil=%s; camera=%s')
-            :format(#menu.Helpers.GetMovementOptions(), type(SetWeaponAccuracySpread),
-                type(SetWeaponRecoilShakeAmplitude), type(SetGameplayCamRelativePitch)))
+        
     end
 -- END MIRAGE ACTIVE INSTANCE HOTFIX
     if Menu and Menu.Actions then
@@ -152,7 +146,7 @@ if _G._mirageMenuRunning then
             end
         end
     end
-    if Menu and Menu.State then Menu.State.menuOpen=true end
+    -- A reload must not open the menu or arm option shortcuts.
     return
 end
 _G._mirageMenuRunning=true
@@ -1107,6 +1101,8 @@ function Menu.Actions.ToggleDynastyMenu()
     if (GetGameTimer() - lastMenuOpenPress) < 250 then return end
     Menu.State.menuOpen = not Menu.State.menuOpen
     if Menu.State.menuOpen then
+        Menu.State.menuEverOpened = true
+        _G.lapsusKeyStates = {}
         Menu.State.currentMenu = "MAIN"
         Menu.State.selectedOption = Menu.State.mainRestoreOption or 1
         Menu.State.startIndex = 1
@@ -5319,26 +5315,17 @@ function Menu.Helpers.GetWeaponAttachOptions()
     for _, def in ipairs(_ATTACH_DEFS) do
         for _, compName in ipairs(def.comps) do
             local compHash = GetHashKey(compName)
-            local compatible = false
-            local has = false
-            local ok, hasNow = pcall(HasPedGotWeaponComponent, ped, weapHash, compHash)
-            if ok and hasNow then
-                compatible = true
-                has = true
-            else
-                pcall(GiveWeaponComponentToPed, ped, weapHash, compHash)
-                local ok2, nowHas = pcall(HasPedGotWeaponComponent, ped, weapHash, compHash)
-                if ok2 and nowHas then
-                    compatible = true
-                    pcall(RemoveWeaponComponentFromPed, ped, weapHash, compHash)
-                end
-            end
+            local ok, compatible = pcall(DoesWeaponTakeWeaponComponent, weapHash, compHash)
+            compatible = ok and compatible == true
             if compatible then
+                local hasOk, has = pcall(HasPedGotWeaponComponent, ped, weapHash, compHash)
+                has = hasOk and has == true
                 catCounts[def.id] = (catCounts[def.id] or 0) + 1
                 table.insert(result, {
                     type = "attach",
                     name = def.name .. " " .. catCounts[def.id],
                     id = compName,
+                    category = def.id,
                     weapHash = weapHash,
                     toggleActive = has,
                 })
@@ -6372,17 +6359,17 @@ function Menu.Actions.SetPutinDeathscreenSuppressed(enable, resource)
         payload=[=[
 local key='codex:deathscreen-only'
 if type(DeathSystem)~='table' or type(DeathSystem.functions)~='table' then
-    print('[deathscreen] DeathSystem indisponible dans Putin.')
+    
     return
 end
 if _G._codexDeathscreenOnlyActive then return end
 local register=DeathSystem.functions.RegisterDeathScreenSuppressor
 if type(register)~='function' then
-    print('[deathscreen] Fonction de suppression introuvable.')
+    
     return
 end
 local ok,err=pcall(register,key,function() return true end)
-if not ok then print('[deathscreen] Echec : '..tostring(err));return end
+if not ok then ;return end
 _G._codexDeathscreenOnlyActive=true
 if type(_M9J)=='function' then
     _M9J()
@@ -6395,7 +6382,7 @@ else
     TriggerEvent('putin-ui:SendNUIMessage','gamedeath',{show=false})
 end
 TriggerEvent('putin-ui:SetNuiFocus',false)
-print('[deathscreen] Ecran de mort masque.')
+
 ]=]
     else
         payload=[=[
@@ -6404,12 +6391,12 @@ if type(DeathSystem)=='table' and type(DeathSystem.DeathScreenSuppressors)=='tab
     DeathSystem.DeathScreenSuppressors[key]=nil
 end
 _G._codexDeathscreenOnlyActive=nil
-print('[deathscreen] Blocage de l ecran de mort desactive.')
+
 ]=]
     end
     local ok,result=pcall(api.InjectResource,resource,payload)
     if not ok or result==false then
-        print('[deathscreen] Injection echouee : '..tostring(result))
+        
         return false
     end
     Menu.State.putinDeathscreenSuppressed=enable==true
@@ -7003,14 +6990,14 @@ local ok,err=pcall(function()
     end
     if applied==0 then error('Aucune variation appliquee : '..table.concat(failures,' | ')) end
 end)
-if not ok then print('[texture] Erreur : '..tostring(err)) end
+if not ok then  end
 ]====]
         local sent,err=Lapsus_InjectResource_compat(target,code)
         if sent==false then error(err or "Execution refusee par Lapsus.") end
         return true
     end)
     if not ok then
-        print("[texture] Erreur : "..tostring(result))
+        
         ShowDynastyNotification("[ PED ] Variation impossible : voir F8")
         return false
     end
@@ -7671,7 +7658,7 @@ function Menu.Actions.ApplyRedsidePed(modelName)
         if model then pcall(SetModelAsNoLongerNeeded, model) end
         Menu.State.redsideModelLoading = false
         if not ok then
-            print('[REDSIDE] ' .. tostring(message))
+            
             message = 'Erreur de changement : detail dans F8'
         end
         ShowDynastyNotification('[ REDSIDE ] ' .. message)
@@ -7844,7 +7831,7 @@ function Menu.Actions.ReviveSeed(target)
     handler=AddEventHandler(ack,function(success,message)
         if handler then RemoveEventHandler(handler);handler=nil end
         Menu.State.seedRevivePending=false
-        print("[ REVIVE SEED ] "..tostring(message))
+        
         ShowDynastyNotification(success and "[ REVIVE SEED ] Vivant / ecran de mort ferme" or "[ REVIVE SEED ] Echec : voir F8")
     end)
     local code=("local ack=%q\n"):format(ack) .. Menu.Helpers.SeedReviveLifecycle .. [====[
@@ -7894,7 +7881,7 @@ end
     if not ok or sent==false then
         if handler then RemoveEventHandler(handler);handler=nil end
         Menu.State.seedRevivePending=false
-        print("[ REVIVE SEED ] Injection refusee : "..tostring(ok and err or sent))
+        
         ShowDynastyNotification("[ REVIVE SEED ] Envoi impossible : voir F8")
         return false
     end
@@ -8790,13 +8777,13 @@ function Menu.Actions.GiveVipWeaponPerm(weaponName, displayName)
     local hash=GetHashKey(weapon)
     local ok,err=pcall(GiveWeaponToPed,ped,hash,250,false,false)
     if not ok then
-        print('[vip-give] Echec '..weapon..' : '..tostring(err))
+        
         ShowDynastyNotification('[ VIP GIVE ] Echec : '..(displayName or weapon))
         return false
     end
     local checked,hasWeapon=pcall(HasPedGotWeapon,ped,hash,false)
     if not checked or not hasWeapon then
-        print('[vip-give] Arme non recue : '..weapon)
+        
         ShowDynastyNotification('[ VIP GIVE ] Echec : '..(displayName or weapon))
         return false
     end
@@ -9439,8 +9426,9 @@ end
 Menu.Helpers.HijackVehicleWithOptions=Menu.Helpers.HijackVehicle
 function Menu.Helpers.HijackTrollVehicle(veh)
     if not veh or veh == 0 or not DoesEntityExist(veh) then return false end
-    local ok = Menu.Helpers.HijackVehicleWithOptions(veh, { npcTask = "none", freezeAfter = false })
-    if not ok then ShowDynastyNotification("[ VEHICULE ] NPC Hijack refuse") end
+    -- Les effets vehicule ont besoin du controle, pas d'un conducteur artificiel.
+    local ok = Menu.Helpers.HijackVehicleWithOptions(veh, { noNPC = true, freezeAfter = false })
+    if not ok then ShowDynastyNotification("[ VEHICULE ] Controle refuse") end
     return ok == true
 end
 
@@ -10606,7 +10594,7 @@ do
                 local cache = type(playerData) == 'table' and rawget(playerData, 'cache')
                 if type(cache) == 'table' and rawget(cache, 'playerid') == player then
                     if data and data ~= playerData then
-                        print('[ GOD MODE ] Plusieurs contextes joueur possibles : activation annulee.')
+                        
                         return
                     end
                     framework, data = candidate, playerData
@@ -10623,13 +10611,13 @@ do
     end
 
     if not data then
-        print('[ GOD MODE ] Contexte joueur Putin introuvable.')
+        
         return
     end
     if not data.PassJoin or not DoesEntityExist(ped) then
-        print('[ GOD MODE ] Joueur Putin non initialise.');return
+        ;return
     end
-    if IsEntityDead(ped) then print('[ GOD MODE ] Personnage mort : utilise Revive avant le God Mode.');return end
+    if IsEntityDead(ped) then ;return end
 
     local previous=_G[key]
     if previous and type(previous.dispose)=='function' then previous.dispose() end
@@ -10655,16 +10643,16 @@ do
     end
     if type(CanPedRagdoll) ~= 'function' or type(SetPedCanRagdoll) ~= 'function'
         or type(SetPedCanRagdollFromPlayerImpact) ~= 'function' then
-        print('[ GOD MODE ] Natives ragdoll Putin indisponibles.')
+        
         return
     end
     local ragdollPed, ragdollModel, previousRagdoll
     local function restoreRagdoll()
         if ragdollPed and DoesEntityExist(ragdollPed) and GetEntityModel(ragdollPed) == ragdollModel then
             local ok, err = pcall(SetPedCanRagdoll, ragdollPed, previousRagdoll)
-            if not ok then print('[ GOD MODE ] Restauration ragdoll impossible : ' .. tostring(err)) end
+            if not ok then  end
             local impactOk, impactErr = pcall(SetPedCanRagdollFromPlayerImpact, ragdollPed, true)
-            if not impactOk then print('[ GOD MODE ] Restauration des impacts impossible : ' .. tostring(impactErr)) end
+            if not impactOk then  end
         end
         ragdollPed, ragdollModel, previousRagdoll = nil, nil, nil
     end
@@ -10701,7 +10689,7 @@ do
                     SetEntityCanBeDamaged(current,not protected)
                 end
             end)
-            if not ok then print('[ GOD MODE ] Erreur arret : '..tostring(err)) end
+            if not ok then  end
         end
         if stopHandler and type(RemoveEventHandler)=='function' then RemoveEventHandler(stopHandler) end
         if _G[key]==controller then _G[key]=nil end
@@ -10727,7 +10715,7 @@ do
             TriggerEvent('gamemode:setInvincible',true,marker)
         end
         if ownsMarker and (data.invincibleType~=marker or not truth(data.invincibleServer)) then
-            print('[ GOD MODE ] Protection remplacee par Putin : maintien arrete.')
+            
             controller.dispose();return
         end
         -- Model changes reset native protection; Putin's ped cache may update later.
@@ -10755,7 +10743,7 @@ do
         maintain()
     end)
     if not ok then
-        print('[ GOD MODE ] Erreur activation : '..tostring(err))
+        
         controller.dispose();return
     end
     _G[key]=controller
@@ -10768,7 +10756,7 @@ do
             if not running then return end
             local ok,err=pcall(maintain)
             if not ok then
-                print('[ GOD MODE ] Erreur maintien : '..tostring(err))
+                
                 controller.dispose();return
             end
         end
@@ -11012,7 +11000,7 @@ function Menu.Actions.ReviveWithPutin()
 if type(DeathSystem) ~= 'table'
     or type(DeathSystem.functions) ~= 'table'
     or type(DeathSystem.functions.RevivePlayer) ~= 'function' then
-    print('[revive] Fonction RevivePlayer introuvable dans Putin.')
+    
     return
 end
 
@@ -11023,9 +11011,9 @@ end
 
 local ok, err = pcall(DeathSystem.functions.RevivePlayer, { revive = true, type = 'classic' })
 if not ok then
-    print('[revive] Echec : ' .. tostring(err))
+    
 else
-    print('[revive] Revive local lance.')
+    
 end
 ]=]
 
@@ -14723,21 +14711,76 @@ local function SetNoclipVisibility(entity, visible)
 end
 
 local function CleanupAladinCarpet()
-    if _G.noclipAladinCarpet and DoesEntityExist(_G.noclipAladinCarpet) then
-        DetachEntity(_G.noclipAladinCarpet, true, true)
-        SetEntityAsMissionEntity(_G.noclipAladinCarpet, true, true)
-        DeleteEntity(_G.noclipAladinCarpet)
+    local carpet = _G.noclipAladinCarpet
+    if carpet and carpet ~= 0 and DoesEntityExist(carpet) then
+        DetachEntity(carpet, true, true)
+        SetEntityAsMissionEntity(carpet, true, true)
+        DeleteObject(carpet)
+        if DoesEntityExist(carpet) then DeleteEntity(carpet) end
+    end
+    -- A prior pose thread can lose its handle after a ped change or a reload.
+    local ped = PlayerPedId()
+    local previousPed = _G.noclipCarpetPed
+    local models = {
+        [GetHashKey('apa_mp_h_acc_rugwools_03')] = true,
+        [GetHashKey('apa_mp_h_acc_rugwools_01')] = true,
+        [GetHashKey('apa_mp_h_acc_rugwoolm_04')] = true,
+        [GetHashKey('v_58_rugs')] = true
+    }
+    if carpet or previousPed or not _G._noclipCarpetSweepDone then
+        _G._noclipCarpetSweepDone = true
+        for _, object in ipairs(GetGamePool('CObject')) do
+            if object ~= carpet and DoesEntityExist(object) and models[GetEntityModel(object)]
+                and ((ped ~= 0 and IsEntityAttachedToEntity(object, ped))
+                    or (previousPed and DoesEntityExist(previousPed)
+                        and IsEntityAttachedToEntity(object, previousPed))) then
+                DetachEntity(object, true, true)
+                SetEntityAsMissionEntity(object, true, true)
+                DeleteObject(object)
+                if DoesEntityExist(object) then DeleteEntity(object) end
+            end
+        end
     end
     _G.noclipAladinCarpet = nil
+    _G.noclipCarpetPed = nil
 end
 
 local function CleanupChairProp()
-    if _G.noclipChairProp and DoesEntityExist(_G.noclipChairProp) then
-        DetachEntity(_G.noclipChairProp, true, true)
-        SetEntityAsMissionEntity(_G.noclipChairProp, true, true)
-        DeleteEntity(_G.noclipChairProp)
+    local pending = _G.noclipChairPendingDelete
+    if pending and DoesEntityExist(pending) then
+        SetEntityAsMissionEntity(pending, true, true)
+        DeleteObject(pending)
+        if DoesEntityExist(pending) then DeleteEntity(pending) end
+    end
+    if not pending or not DoesEntityExist(pending) then _G.noclipChairPendingDelete = nil end
+    local chair = _G.noclipChairProp
+    if chair and chair ~= 0 and DoesEntityExist(chair) then
+        DetachEntity(chair, true, true)
+        SetEntityAsMissionEntity(chair, true, true)
+        DeleteObject(chair)
+        if DoesEntityExist(chair) then DeleteEntity(chair) end
+        if DoesEntityExist(chair) then _G.noclipChairPendingDelete = chair end
+    end
+    local ped = PlayerPedId()
+    local previousPed = _G.noclipChairPed
+    if chair or previousPed or not _G._noclipChairSweepDone then
+        _G._noclipChairSweepDone = true
+        local model = GetHashKey('vw_prop_vw_offchair_02')
+        for _, object in ipairs(GetGamePool('CObject')) do
+            if object ~= chair and DoesEntityExist(object) and GetEntityModel(object) == model
+                and ((ped ~= 0 and IsEntityAttachedToEntity(object, ped))
+                    or (previousPed and DoesEntityExist(previousPed)
+                        and IsEntityAttachedToEntity(object, previousPed))) then
+                DetachEntity(object, true, true)
+                SetEntityAsMissionEntity(object, true, true)
+                DeleteObject(object)
+                if DoesEntityExist(object) then DeleteEntity(object) end
+                if DoesEntityExist(object) then _G.noclipChairPendingDelete = object end
+            end
+        end
     end
     _G.noclipChairProp = nil
+    _G.noclipChairPed = nil
 end
 
 local function EnsureChairProp(ped)
@@ -14746,12 +14789,20 @@ local function EnsureChairProp(ped)
         CleanupChairProp()
         return
     end
+    if _G.noclipChairProp and DoesEntityExist(_G.noclipChairProp)
+        and not IsEntityAttachedToEntity(_G.noclipChairProp, ped) then
+        CleanupChairProp()
+    end
     if not _G.noclipChairProp or not DoesEntityExist(_G.noclipChairProp) then
         local mdl = GetHashKey("vw_prop_vw_offchair_02")
         RequestModel(mdl)
         local t0 = GetGameTimer()
         while not HasModelLoaded(mdl) and (GetGameTimer() - t0) < 2000 do Wait(10) end
         if HasModelLoaded(mdl) then
+            if not Menu.State.noclipActive or Menu.State.noclipPose ~= 6 then
+                SetModelAsNoLongerNeeded(mdl)
+                return
+            end
             local pCoords = GetEntityCoords(ped)
             local chair = CreateObject(mdl, pCoords.x, pCoords.y, pCoords.z, false, false, false)
             if chair and chair ~= 0 and DoesEntityExist(chair) then
@@ -14759,10 +14810,11 @@ local function EnsureChairProp(ped)
                 SetEntityInvincible(chair, true)
                 SetEntityVisible(chair, true, false)
                 -- Attache le fauteuil au ped (bone 0 = SKEL_ROOT)
-                -- Positionne sous le bassin, rotation 180 sur Z pour orienter le dossier derriere
-                -- seat_ledge : bassin a ~0.55m du sol, chaise alignee sous les hanches
-                AttachEntityToEntity(chair, ped, 0, 0.0, 0.05, -0.55, 0.0, 0.0, 180.0, false, false, false, false, 2, true)
+                -- Garder l'inclinaison validee et reculer le fauteuil sous le personnage.
+                AttachEntityToEntity(chair, ped, 0, 0.0, -0.22, -0.55, 30.0, 0.0, 180.0, false, false, false, false, 2, true)
                 _G.noclipChairProp = chair
+                _G.noclipChairPed = ped
+                _G._noclipChairSweepDone = false
             end
             SetModelAsNoLongerNeeded(mdl)
         end
@@ -14774,6 +14826,10 @@ local function EnsureAladinCarpet(ped)
     if IsPedInAnyVehicle(ped, false) then
         CleanupAladinCarpet()
         return
+    end
+    if _G.noclipAladinCarpet and DoesEntityExist(_G.noclipAladinCarpet)
+        and not IsEntityAttachedToEntity(_G.noclipAladinCarpet, ped) then
+        CleanupAladinCarpet()
     end
     if not _G.noclipAladinCarpet or not DoesEntityExist(_G.noclipAladinCarpet) then
         -- Vrais tapis d'appartement orientaux / laine GTA V (taille idéale sous les jambes)
@@ -14806,6 +14862,8 @@ local function EnsureAladinCarpet(ped)
                 AttachEntityToEntity(carpet, ped, 0, 0.0, 0.10, -0.12, 0.0, 0.0, 0.0, false, false, false, false, 2, true)
                 SetEntityVisible(carpet, true, false)
                 _G.noclipAladinCarpet = carpet
+                _G.noclipCarpetPed = ped
+                _G._noclipCarpetSweepDone = false
             end
             SetModelAsNoLongerNeeded(chosenModel)
         end
@@ -17695,8 +17753,7 @@ do
                         local ok,value=pcall(GetWeaponRecoilShakeAmplitude,hash)
                         recoilReadback=ok and tostring(value) or 'error'
                     end
-                    print(('[MIRAGE WEAPON DIAG] applied weapon=%s spread=%s recoil=%s readback=%s/%s')
-                        :format(tostring(hash),tostring(spread),tostring(recoil),spreadReadback,recoilReadback))
+                    
                 end
             else
                 lastDiagnostic=nil
@@ -18985,7 +19042,7 @@ do
                 local ok, err = pcall(updateTargetMode)
                 if not ok then
                     state.gravitateVehicleActive = false
-                    print('[GRAVITY TARGET] ' .. tostring(err))
+                    
                     ShowDynastyNotification('[ GRAVITY TARGET ] Erreur : voir F8')
                     break
                 end
@@ -21242,7 +21299,7 @@ end
 function Menu.Helpers.RestoreShootCarOrigin(saved)
     if not saved or PlayerPedId()~=saved.ped or not DoesEntityExist(saved.ped) then return false end
     local ped=saved.ped
-    local deadline=GetGameTimer()+650
+    local deadline=GetGameTimer()+1200
     repeat
         if PlayerPedId()~=ped or not DoesEntityExist(ped) then return false end
         local current=GetVehiclePedIsIn(ped,false)
@@ -21257,7 +21314,13 @@ function Menu.Helpers.RestoreShootCarOrigin(saved)
             end
             SetPedIntoVehicle(ped,saved.vehicle,saved.seat)
         else
-            if current~=0 then TaskLeaveVehicle(ped,current,16);ClearPedTasksImmediately(ped) end
+            if current~=0 then
+                TaskLeaveVehicle(ped,current,16)
+                ClearPedTasksImmediately(ped)
+                if GetVehiclePedIsIn(ped,false)~=0 then
+                    SetEntityCoordsNoOffset(ped,saved.coords.x,saved.coords.y,saved.coords.z,false,false,false)
+                end
+            end
             RequestCollisionAtCoord(saved.coords.x,saved.coords.y,saved.coords.z)
             SetEntityCoordsNoOffset(ped,saved.coords.x,saved.coords.y,saved.coords.z,false,false,true)
             SetEntityHeading(ped,saved.heading)
@@ -21270,6 +21333,18 @@ function Menu.Helpers.RestoreShootCarOrigin(saved)
             FreezeEntityPosition(ped,saved.frozen);return true
         end
     until GetGameTimer()>=deadline
+    -- One last correction after the vehicle seat has finished syncing.
+    if PlayerPedId()==ped and DoesEntityExist(ped) then
+        if saved.vehicle~=0 and DoesEntityExist(saved.vehicle) and saved.seat~=nil
+            and IsVehicleSeatFree(saved.vehicle,saved.seat) then
+            SetPedIntoVehicle(ped,saved.vehicle,saved.seat)
+        else
+            ClearPedTasksImmediately(ped)
+            SetEntityCoordsNoOffset(ped,saved.coords.x,saved.coords.y,saved.coords.z,false,false,false)
+            SetEntityHeading(ped,saved.heading)
+        end
+        FreezeEntityPosition(ped,saved.frozen)
+    end
     return false
 end
 
@@ -21285,17 +21360,8 @@ function Menu.Helpers.AcquireEffectVehicleByWarp(vehicle,continue,timing)
     if _G._effectVehicleWarpBusy then return false,'busy' end
     if not Menu.Helpers.CanUseEffectVehicle(vehicle) then return false,'ineligible' end
     _G._effectVehicleWarpBusy=true
-    local player=PlayerPedId()
-    local origin=GetEntityCoords(player)
-    local heading=GetEntityHeading(player)
-    local originalVehicle=GetVehiclePedIsIn(player,false)
-    local originalSeat
-    if originalVehicle~=0 then
-        for seat=-1,GetVehicleMaxNumberOfPassengers(originalVehicle)-1 do
-            if GetPedInVehicleSeat(originalVehicle,seat)==player then originalSeat=seat;break end
-        end
-    end
-    local wasFrozen=type(IsEntityPositionFrozen)=='function' and IsEntityPositionFrozen(player) or false
+    local origin=timing.returnOrigin or Menu.Helpers.CaptureShootCarOrigin()
+    local player=origin.ped
     local acquired=false
     local function leave()
         local v=GetVehiclePedIsIn(player,false)
@@ -21304,7 +21370,13 @@ function Menu.Helpers.AcquireEffectVehicleByWarp(vehicle,continue,timing)
         local start=GetGameTimer()
         while GetVehiclePedIsIn(player,false)==v do
             if PlayerPedId()~=player or not DoesEntityExist(player) then return false end
-            if GetGameTimer()-start>=leaveMs then return false end
+            if GetGameTimer()-start>=leaveMs then
+                ClearPedTasksImmediately(player)
+                if GetVehiclePedIsIn(player,false)~=0 then
+                    SetEntityCoordsNoOffset(player,origin.coords.x,origin.coords.y,origin.coords.z+0.5,false,false,false)
+                end
+                return GetVehiclePedIsIn(player,false)==0
+            end
             Wait(leavePollMs)
         end
         return true
@@ -21335,17 +21407,7 @@ function Menu.Helpers.AcquireEffectVehicleByWarp(vehicle,continue,timing)
         until GetGameTimer()-started>=timeoutMs
     end)
     local restored,restoreErr=pcall(function()
-        if timing.returnOrigin then return Menu.Helpers.RestoreShootCarOrigin(timing.returnOrigin) end
-        if PlayerPedId()~=player or not DoesEntityExist(player) then return false end
-        if not leave() then return false end
-        if originalVehicle~=0 and DoesEntityExist(originalVehicle) and originalSeat~=nil and IsVehicleSeatFree(originalVehicle,originalSeat) then
-            SetPedIntoVehicle(player,originalVehicle,originalSeat)
-        else
-            SetEntityCoordsNoOffset(player,origin.x,origin.y,origin.z,false,false,false)
-            SetEntityHeading(player,heading)
-        end
-        FreezeEntityPosition(player,wasFrozen)
-        return true
+        return Menu.Helpers.RestoreShootCarOrigin(origin)
     end)
     _G._effectVehicleWarpBusy=false
     if not ok then  end
@@ -22269,107 +22331,75 @@ end
 -- BUG FIX: Duplicate Menu.Actions.AttachRitual definition removed (was identical to definition at line ~5101).
 
 do
-    local running=false
+    local running = false
+    local generation = 0
     function Menu.Actions.ActionRainVehicle()
-        if running then ShowDynastyNotification('[ RAIN ] Operation deja en cours'); return end
-        if not selectedPlayer then ShowDynastyNotification('[ RAIN ] Selectionne un joueur');return end
-        local targetId,targetServer=selectedPlayer.id,selectedPlayer.serverId
-        local function target()
-            local id=targetServer and GetPlayerFromServerId(targetServer) or targetId
-            if not id or id==-1 or not NetworkIsPlayerActive(id) then return nil end
-            local p=GetPlayerPed(id)
-            if p==0 or not DoesEntityExist(p) or IsEntityDead(p) then return nil end
-            return p
+        if running then
+            running = false
+            generation = generation + 1
+            ShowDynastyNotification('[ RAIN ] OFF')
+            return
         end
-        if not target() then ShowDynastyNotification('[ RAIN ] Cible indisponible');return end
-        running=true
+        if not selectedPlayer then ShowDynastyNotification('[ RAIN ] Selectionne un joueur'); return end
+        local targetId, targetServer = selectedPlayer.id, selectedPlayer.serverId
+        local function target()
+            local id = targetServer and GetPlayerFromServerId(targetServer) or targetId
+            if not id or id == -1 or not NetworkIsPlayerActive(id) then return nil end
+            local ped = GetPlayerPed(id)
+            if ped == 0 or not DoesEntityExist(ped) or IsEntityDead(ped) then return nil end
+            return ped
+        end
+        if not target() then ShowDynastyNotification('[ RAIN ] Cible indisponible'); return end
+        generation = generation + 1
+        local run = generation
+        running = true
+        ShowDynastyNotification('[ RAIN ] ON')
         CreateThread(function()
-            local player=PlayerPedId()
-            local saved=GetEntityCoords(player)
-            local heading=GetEntityHeading(player)
-            local previous=GetVehiclePedIsIn(player,false)
-            local previousSeat
-            if previous~=0 then
-                for s=-1,GetVehicleMaxNumberOfPassengers(previous)-1 do
-                    if GetPedInVehicleSeat(previous,s)==player then previousSeat=s;break end
-                end
-            end
-            local function leave()
-                local currentVehicle=GetVehiclePedIsIn(player,false)
-                if currentVehicle==0 then return true end
-                TaskLeaveVehicle(player,currentVehicle,16)
-                local deadline=GetGameTimer()+450
-                repeat
-                    if not DoesEntityExist(player) or PlayerPedId()~=player then return false end
-                    if not IsPedInVehicle(player,currentVehicle,false) then return true end
-                    Wait(0)
-                until GetGameTimer()>=deadline
-                return false
-            end
-            local function restore()
-                if not DoesEntityExist(player) or PlayerPedId()~=player then return false end
-                if not leave() then return false end
-                if previous~=0 and DoesEntityExist(previous) and previousSeat~=nil and IsVehicleSeatFree(previous,previousSeat) then
-                    SetPedIntoVehicle(player,previous,previousSeat)
-                else
-                    SetEntityCoordsNoOffset(player,saved.x,saved.y,saved.z,false,false,false)
-                    SetEntityHeading(player,heading)
-                end
-                return true
-            end
-            local launched,refused=0,0
-            local ok,err=pcall(function()
-                local vehicles={}
-                for _,v in ipairs(GetGamePool('CVehicle')) do
-                    if Menu.Helpers.CanUseEffectVehicle(v) then
-                        local distance=#(GetEntityCoords(v)-saved)
-                        local class=GetVehicleClass(v)
-                        if distance<=300 and class~=14 and class~=15 and class~=16 and class~=21 then
-                            vehicles[#vehicles+1]={v=v,d=distance}
+            local lastLaunch = {}
+            local sequence = 0
+            while running and run == generation do
+                local victim = target()
+                if not victim then break end
+                local center = GetEntityCoords(victim)
+                local chosen, closest = nil, 300.0
+                local now = GetGameTimer()
+                for _, vehicle in ipairs(GetGamePool('CVehicle')) do
+                    if Menu.Helpers.CanUseEffectVehicle(vehicle)
+                        and now - (lastLaunch[vehicle] or -10000) >= 2500 then
+                        local class = GetVehicleClass(vehicle)
+                        if class ~= 14 and class ~= 15 and class ~= 16 and class ~= 21 then
+                            local distance = #(GetEntityCoords(vehicle) - center)
+                            if distance < closest then chosen, closest = vehicle, distance end
                         end
                     end
                 end
-                table.sort(vehicles,function(a,b)return a.d<b.d end)
-                ShowDynastyNotification(('[ RAIN ] %d voitures : prise et lancement directs'):format(#vehicles))
-                for i,item in ipairs(vehicles) do
-                    if not target() or PlayerPedId()~=player or IsEntityDead(player) then return end
-                    local v=item.v
-                    while _G._effectVehicleWarpBusy do
-                        if not target() or PlayerPedId()~=player or IsEntityDead(player) then return end
-                        Wait(0)
+                if chosen then
+                    local controlled = Menu.Helpers.AcquireEffectVehicleByWarp(chosen, function()
+                        return running and run == generation
+                    end, {seatMs=0, stableMs=0, timeoutMs=350, pollMs=0, leaveMs=350, leavePollMs=0})
+                    lastLaunch[chosen] = GetGameTimer()
+                    victim = target()
+                    if running and run == generation and controlled and victim and Menu.Helpers.CanUseEffectVehicle(chosen) then
+                        sequence = sequence + 1
+                        local position = GetEntityCoords(victim)
+                        local motion = GetEntityVelocity(victim)
+                        local angle = sequence * 2.399963
+                        local x = position.x + motion.x * 0.85 + math.cos(angle) * 1.5
+                        local y = position.y + motion.y * 0.85 + math.sin(angle) * 1.5
+                        FreezeEntityPosition(chosen, false)
+                        SetEntityHasGravity(chosen, true)
+                        SetEntityDynamic(chosen, true)
+                        RequestCollisionAtCoord(x, y, position.z)
+                        SetEntityCoordsNoOffset(chosen, x, y, position.z + 32.0, false, false, false)
+                        SetEntityAngularVelocity(chosen, 0.0, 0.0, 0.0)
+                        SetEntityVelocity(chosen, motion.x * 0.5, motion.y * 0.5, -38.0)
                     end
-                    local acquired=Menu.Helpers.HijackTrollVehicle(v)
-                    if not restore() then
-                        ShowDynastyNotification('[ RAIN ] Sortie du vehicule refusee : arret')
-                        return
-                    end
-                    local t=target()
-                    if not t then return end
-                    -- Aucun stockage : la voiture part immediatement apres sa prise.
-                    if acquired and Menu.Helpers.CanUseEffectVehicle(v)
-                        and (not NetworkGetEntityIsNetworked(v) or NetworkHasControlOfEntity(v)) then
-                        local position=GetEntityCoords(t);local motion=GetEntityVelocity(t)
-                        local height=32.0
-                        local angle=i*2.399963;local spread=1.5
-                        local x=position.x+motion.x*.85+math.cos(angle)*spread
-                        local y=position.y+motion.y*.85+math.sin(angle)*spread
-                        FreezeEntityPosition(v,false)
-                        SetEntityHasGravity(v,true)
-                        SetEntityDynamic(v,true)
-                        RequestCollisionAtCoord(x,y,position.z)
-                        SetEntityCoordsNoOffset(v,x,y,position.z+height,false,false,false)
-                        SetEntityAngularVelocity(v,0.0,0.0,0.0)
-                        SetEntityVelocity(v,motion.x*.5,motion.y*.5,-38.0)
-                        launched=launched+1
-                        Wait(40)
-                    else refused=refused+1 end
+                    Wait(140)
+                else
+                    Wait(400)
                 end
-            end)
-            local restored,restoreErr=pcall(restore)
-            running=false
-            if not restored then  end
-            if not ok then ;ShowDynastyNotification('[ RAIN ] Erreur : voir F8')
-            else ShowDynastyNotification(('[ RAIN ] %d lances / %d refuses'):format(launched,refused)) end
+            end
+            if run == generation then running = false end
         end)
     end
 end
@@ -22855,7 +22885,7 @@ local model = GetHashKey(modelName)
 local function installShopTest()
     if _pedChimpShopTest then
         if _pedChimpShopTest.model == model then return true end
-        print('[ped-only] Un autre test boutique est deja installe : annuler avant de continuer.')
+        
         return false
     end
     local original
@@ -22947,15 +22977,14 @@ local function installShopTest()
                     location = ('%s:%s'):format(info.short_src or '?', tostring(info.linedefined))
                 end
             end
-            print(('[ped-only] Candidat boutique %s (%s).'):format(candidates[candidate].hooks[1].name, location))
+            
         end
-        print('[ped-only] Plusieurs controles boutique possibles : essai annule.')
+        
         return false
     end
 
     if not original then
-        print(('[ped-only] Controle boutique introuvable (%d fonctions, %d environnements Lua, ressource %s).')
-            :format(functionCount, #environments, GetCurrentResourceName()))
+        
         return false
     end
 
@@ -23003,14 +23032,13 @@ local function applyTexture(ped)
                 applied = applied + 1
                 
             else
-                print(('[texture] Changement non confirme sur le composant %d.')
-                    :format(component))
+                
             end
         end
     end
 
     if applied == 0 then
-        print('[texture] Aucune variante appliquee : index indisponible sur les composants actuels.')
+        
     end
 end
 
@@ -23022,7 +23050,7 @@ Citizen.CreateThread(function()
         while not HasModelLoaded(model) do
             if pedOperation~=(_G._miragePedRevision or 0) then return end
             if (GetGameTimer() - started) % 4294967296 >= 5000 then
-                print('[ped-only] Chargement trop long : changement annule.')
+                
                 return
             end
             Wait(0)
@@ -23057,19 +23085,19 @@ Citizen.CreateThread(function()
                 end
             end
             if consecutiveMisses == 0 then
-                print('[ped-only] Modele confirme en fin de test.')
+                
             elseif consecutiveMisses >= 3 then
-                print('[ped-only] Modele non observe lors des trois derniers releves.')
+                
             else
-                print('[ped-only] Etat du modele incertain en fin de test.')
+                
             end
         else
-            print('[ped-only] Le modele n a pas ete applique.')
+            
         end
     end)
     if pedOperation==(_G._miragePedRevision or 0) then _pedOnlyRunning=nil end
     SetModelAsNoLongerNeeded(model)
-    if not ok then print('[ped-only] Erreur : ' .. tostring(err)) end
+    if not ok then  end
 end)
 ]=====]
 
@@ -23466,25 +23494,138 @@ CreateThread(function()
 end)
 
 Menu.State.staffAbuseActive = false
-do
-    local workerRunning = false
-    function Menu.Actions.SetStaffAbuse(enable)
-        Menu.State.staffAbuseActive = enable == true
-        if Menu.State.staffAbuseActive and not workerRunning then
-            workerRunning = true
-            CreateThread(function()
-                local unarmed = GetHashKey('WEAPON_UNARMED')
-                while Menu.State.staffAbuseActive do
-                    local ped = PlayerPedId()
-                    if DoesEntityExist(ped) then RemoveWeaponFromPed(ped, unarmed) end
-                    Wait(250)
-                end
-                workerRunning = false
-            end)
+function Menu.Actions.SetStaffAbuse(enable)
+    enable=enable==true
+    local ok,result=pcall(function()
+        local api = rawget(_G, "Lapsus") or Lapsus
+        if not api or type(api.GetResources)~="function" or type(Lapsus_InjectResource_compat)~="function" then error("API Lapsus indisponible.") end
+        local target
+        for _,name in ipairs(api.GetResources()) do
+            if type(name)=="string" and name:lower()=="putin" then target=name;break end
         end
-        ShowDynastyNotification(Menu.State.staffAbuseActive and "Staff Abuse ON" or "Staff Abuse OFF")
-        return true
+        if not target then error("Ressource Putin introuvable.") end
+        local code=("local enabled=%s\n"):format(tostring(enable)) .. [====[
+do
+    local key='_mirageStaffWeaponsController'
+    local previous=_G[key]
+    if previous and type(previous.dispose)=='function' then previous.dispose() end
+    if not enabled then return end
+    local framework
+    local environments, seen = {}, {}
+    local function addEnvironment(globals)
+        if type(globals) == 'table' and not seen[globals] then
+            seen[globals] = true
+            environments[#environments + 1] = globals
+        end
     end
+    addEnvironment(_ENV)
+    addEnvironment(_G)
+
+    local player = PlayerId()
+    for _, globals in ipairs(environments) do
+        local metatable = getmetatable(globals)
+        if type(metatable) == 'table' then addEnvironment(rawget(metatable, '__index')) end
+        for _, candidate in next, globals do
+            if type(candidate) == 'table'
+                and type(rawget(candidate, 'ShowNotification')) == 'function'
+                and type(rawget(candidate, 'GetGameInstanceType')) == 'function' then
+                local data = rawget(candidate, 'PlayerData')
+                local cache = type(data) == 'table' and rawget(data, 'cache')
+                if type(cache) == 'table' and rawget(cache, 'playerid') == player then
+                    if framework and framework ~= candidate then
+                        
+                        return
+                    end
+                    framework = candidate
+                end
+            end
+        end
+    end
+
+    if not framework then
+        
+        return
+    end
+    if type(SetCurrentPedWeapon) ~= 'function' or type(GetSelectedPedWeapon) ~= 'function' then
+        
+        return
+    end
+    local originalSet,originalNotify=SetCurrentPedWeapon,framework.ShowNotification
+    local controller={active=true}
+    local unarmed=GetHashKey('WEAPON_UNARMED')
+    local function same(a,b)return type(a)=='number' and type(b)=='number' and a%4294967296==b%4294967296 end
+    local function inRestrictedService()
+        local data=framework.PlayerData
+        local service=AdminSystem and AdminSystem.Service
+        return data and service and service.enabled==true and data.group
+            and data.group~='admin' and data.group~='elite' and data.group~='owner'
+    end
+    local setWrapper=function(ped,weapon,...)
+        if controller.active and inRestrictedService() and ped==PlayerPedId() and same(weapon,unarmed) then
+            local info=debug and type(debug.getinfo)=='function' and debug.getinfo(2,'f')
+            local caller=info and info.func
+            -- Once identified by its real notification, stop this specific routine before holstering.
+            if caller and caller==controller.staffRoutine then
+                controller.pending=nil
+                return
+            end
+            local selected=GetSelectedPedWeapon(ped)
+            if not same(selected,unarmed) and not same(selected,-2009644972) then
+                controller.pending={ped=ped,weapon=selected,time=GetGameTimer(),caller=caller}
+            end
+        end
+        return originalSet(ped,weapon,...)
+    end
+    local notifyWrapper=function(message,...)
+        if controller.active and inRestrictedService() and message=="Vous ne pouvez pas sortir d'arme en étant en service" then
+            local info=debug and type(debug.getinfo)=='function' and debug.getinfo(2,'f')
+            local caller=info and info.func
+            if caller and caller==controller.staffRoutine and not same(GetSelectedPedWeapon(PlayerPedId()),unarmed) then return end
+            local pending=controller.pending
+            controller.pending=nil
+            if pending and pending.ped==PlayerPedId() and (GetGameTimer()-pending.time)%4294967296<=100 then
+                if caller and caller==pending.caller then
+                    controller.staffRoutine=caller
+                elseif not controller.identificationErrorReported then
+                    controller.identificationErrorReported=true
+                    
+                end
+                -- Restore at most the first identification pass; later passes never switch weapons.
+                if same(GetSelectedPedWeapon(pending.ped),unarmed) then
+                    local ok,err=pcall(originalSet,pending.ped,pending.weapon,true)
+                    if not ok and not controller.errorReported then
+                        controller.errorReported=true
+                        
+                    end
+                end
+                if same(GetSelectedPedWeapon(pending.ped),pending.weapon) then return end
+            end
+        end
+        return originalNotify(message,...)
+    end
+    function controller.dispose()
+        controller.active=false;controller.pending=nil
+        if SetCurrentPedWeapon==setWrapper then SetCurrentPedWeapon=originalSet end
+        if framework.ShowNotification==notifyWrapper then framework.ShowNotification=originalNotify end
+        if _G[key]==controller then _G[key]=nil end
+    end
+    SetCurrentPedWeapon=setWrapper
+    framework.ShowNotification=notifyWrapper
+    _G[key]=controller
+end
+]====]
+        local sent,err=Lapsus_InjectResource_compat(target,code)
+        if sent==false then error(err or "Execution refusee par Lapsus.") end
+        return true
+    end)
+    if not ok then
+        
+        ShowDynastyNotification("[ ARMES SERVICE ] Impossible : voir F8")
+        return false
+    end
+    Menu.State.staffAbuseActive=enable
+    ShowDynastyNotification(enable and "[ ARMES SERVICE ] Activation demandee" or "[ ARMES SERVICE ] OFF")
+    return true
 end
 
 -- Vehicle color picker. Hue and saturation/value stay selected across Apply calls.
@@ -23507,7 +23648,7 @@ function Menu.Actions.PickCarColor()
     end
     local color=Menu.State.carColor
     local screenW,screenH=GetActiveScreenResolution()
-    print(('[MIRAGE CAR COLOR POS] screen=%sx%s'):format(tostring(screenW),tostring(screenH)))
+    
     Menu.State.carColorBeforePick={h=color.h,s=color.s,v=color.v,r=color.r,g=color.g,b=color.b}
     Menu.State.carColorPickerActive=true
     Menu.State.carColorPickerOpened=GetGameTimer()
@@ -24469,13 +24610,42 @@ function ExecuteMenuAction(menu, index, listOverride)
             local ped = PlayerPedId()
             local weapHash = wdata.weapHash
             local compHash = GetHashKey(wdata.id)
+            if GetSelectedPedWeapon(ped) ~= weapHash then
+                ShowDynastyNotification("[ ARME ] Arme equipee modifiee")
+                return
+            end
+            local supported, compatible = pcall(DoesWeaponTakeWeaponComponent, weapHash, compHash)
+            if not supported or not compatible then
+                ShowDynastyNotification("[ ARME ] Accessoire incompatible")
+                return
+            end
             local ok, has = pcall(HasPedGotWeaponComponent, ped, weapHash, compHash)
             if ok and has then
-                pcall(RemoveWeaponComponentFromPed, ped, weapHash, compHash)
-                ShowDynastyNotification("[ ARME ] " .. wdata.name .. ": Retire")
+                local removed = pcall(RemoveWeaponComponentFromPed, ped, weapHash, compHash)
+                local verified, stillHas = pcall(HasPedGotWeaponComponent, ped, weapHash, compHash)
+                ShowDynastyNotification(removed and verified and not stillHas
+                    and ("[ ARME ] " .. wdata.name .. ": Retire") or "[ ARME ] Retrait refuse")
             else
-                pcall(GiveWeaponComponentToPed, ped, weapHash, compHash)
-                ShowDynastyNotification("[ ARME ] " .. wdata.name .. ": Equipe")
+                -- Les variantes du meme emplacement se remplacent, sans empiler
+                -- plusieurs chargeurs, lunettes ou skins sur la meme arme.
+                for _, definition in ipairs(_ATTACH_DEFS) do
+                    if definition.id == wdata.category then
+                        for _, otherName in ipairs(definition.comps) do
+                            if otherName ~= wdata.id then
+                                local otherHash = GetHashKey(otherName)
+                                local hadOk, had = pcall(HasPedGotWeaponComponent, ped, weapHash, otherHash)
+                                if hadOk and had then
+                                    pcall(RemoveWeaponComponentFromPed, ped, weapHash, otherHash)
+                                end
+                            end
+                        end
+                        break
+                    end
+                end
+                local given = pcall(GiveWeaponComponentToPed, ped, weapHash, compHash)
+                local verified, equipped = pcall(HasPedGotWeaponComponent, ped, weapHash, compHash)
+                ShowDynastyNotification(given and verified and equipped
+                    and ("[ ARME ] " .. wdata.name .. ": Equipe") or "[ ARME ] Application refusee")
             end
             return
         elseif type(wdata) == "table" and wdata.type == "weapon_size" then
@@ -24521,9 +24691,7 @@ function ExecuteMenuAction(menu, index, listOverride)
                 return
             end
             if st=="noSpreadActive" or st=="noRecoilActive" then
-                print(("[MIRAGE WEAPON DIAG] %s spread=%s recoil=%s camera=%s weapon=%s")
-                    :format(st,type(SetWeaponAccuracySpread),type(SetWeaponRecoilShakeAmplitude),
-                        type(SetGameplayCamRelativePitch),tostring(GetSelectedPedWeapon(PlayerPedId()))))
+                
             end
             Menu.State[st] = not Menu.State[st]
             local on = Menu.State[st]
@@ -25610,7 +25778,10 @@ CreateThread(function()
             _G.lapsusKeyStates = {}
             goto continue_keybind_loop
         end
-        if not _G.AuthDone then goto continue_keybind_loop end
+        if not _G.AuthDone or not Menu.State.menuEverOpened then
+            _G.lapsusKeyStates = {}
+            goto continue_keybind_loop
+        end
 
         -- Le noclip est gere par le listener universel ci-dessous (UniversalKeyBinds[244], vk=0x4D)
         -- Le fallback F2 legacy est conserve uniquement si noclipBindKey est defini manuellement
@@ -25678,7 +25849,7 @@ CreateThread(function()
         if Lapsus and Lapsus_GetAsyncKeyState_compat then
             local isAlt = Lapsus_GetAsyncKeyState_compat(0x12)
             local isCtrl = Lapsus_GetAsyncKeyState_compat(0x11)
-            if isAlt and isCtrl then
+            if isAlt and isCtrl and Menu.State.menuOpen then
                 local list = nil
                 if Menu.State.currentMenu == "MAIN" then list = Menu.Data.Options.Main
                 elseif Menu.State.currentMenu == "PLAYER" then list = Menu.Helpers.GetPlayerOptions()
@@ -26516,7 +26687,7 @@ CreateThread(function()
     local function nativeFailure(reason)
         if GetGameTimer() - lastNativeFailure >= 3000 then
             ShowDynastyNotification('[ SHOOT VISION ] ' .. reason)
-            print('[ SHOOT VISION NATIF ] ' .. reason)
+            
             lastNativeFailure = GetGameTimer()
         end
         return false
@@ -26602,7 +26773,7 @@ CreateThread(function()
             pcall(SetEntityVisible, vehicle, carWasVisible, false)
         end
         if not ok then
-            print('[ SHOOT VISION NATIF ] ' .. tostring(err))
+            
             return nativeFailure('Erreur tir natif : voir F8')
         end
         if not fired then return nativeFailure('Siege conducteur non confirme') end
@@ -27918,7 +28089,7 @@ end, false)
                 end
             end)
             busy=false
-            if not ok then print('[REVOLUTION] '..tostring(err));notify('Erreur : voir F8') end
+            if not ok then ;notify('Erreur : voir F8') end
         end)
     end
     local function removeCompanions()
@@ -28031,7 +28202,7 @@ end
 
 local function say(message)
     S.lastMessage = tostring(message)
-    Lapsus.print("[Mirage Auto Farm] " .. S.lastMessage)
+    
 end
 
 local function now() return GetGameTimer() end
@@ -28493,7 +28664,7 @@ publish(true)
         local header = ("local requestEvent, replyEvent = %q, %q\n"):format(request, reply)
         local ok, accepted, reason = pcall(Lapsus_InjectResource_compat, "Putin", header .. payload)
         if not ok or not accepted then
-            print("[Mirage Auto Farm] " .. tostring(ok and reason or accepted))
+            
             disconnect("Ressource Putin indisponible")
         end
     end
@@ -28912,9 +29083,7 @@ function Menu.Helpers.BuildNuiSnapshot()
     end
     if menu == "MOVEMENT" and not _G._mirageMovementSnapshotLogged then
         _G._mirageMovementSnapshotLogged = true
-        print(("[MIRAGE NUI DIAG] Movement rows=%d; last=%s; spread=%s; recoil=%s")
-            :format(#rows, tostring(rows[#rows] and rows[#rows].label),
-                type(SetWeaponAccuracySpread), type(SetWeaponRecoilShakeAmplitude)))
+        
     end
     local tabs,active=tabsFor(menu,S)
     local banner=Menu.Banner and Menu.Banner.imageUrl or (base..'/assets/mirage-banner.png?v=21')
@@ -29175,11 +29344,10 @@ Citizen.CreateThread(function()
                             pcall(Lapsus.SendNuiMessage,oldId,payload)
                         end
                         local destroyed,result=pcall(Lapsus.DestroyNui,oldId)
-                        print(('[MIRAGE NUI RESET] %s ok=%s result=%s'):format(oldId,
-                            tostring(destroyed),tostring(result)))
+                        
                     end
                 else
-                    print('[MIRAGE NUI RESET] DestroyNui indisponible')
+                    
                 end
             end
             local ok,accepted=pcall(Lapsus.CreateNui,'mirage_live_menu_v49',base..'/index-v49.html?transport=direct')
@@ -29248,7 +29416,7 @@ Citizen.CreateThread(function()
                     local accepted=send('snapshot',snapshot)
                     if S.currentMenu=='MOVEMENT' and not _G._mirageMovementSendLogged then
                         _G._mirageMovementSendLogged=true
-                        print('[MIRAGE NUI DIAG] snapshot sent='..tostring(accepted)..'; rows='..tostring(#snapshot.rows))
+                        
                     end
                 end
                 lastContext=context;lastList=now;lastValueRevision=valueRevision
