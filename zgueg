@@ -1,6 +1,6 @@
 -- Renseigne le domaine public Railway, sans chemin.
 _G.MirageNuiBaseUrl = "https://nuirepo-production.up.railway.app"
-
+print('[MIRAGE SHIFT DIAG v1] fichier charge; deja actif='..tostring(_G._mirageMenuRunning==true))
 if not _G._mirageShiftDiagRunning then
     _G._mirageShiftDiagRunning=true
     CreateThread(function()
@@ -19,7 +19,11 @@ if not _G._mirageShiftDiagRunning then
                         bindCount=bindCount+1
                     end
                 end
-                
+                print(('[MIRAGE SHIFT DIAG v1] gravity=%s mode=%s boost=%s rocket=%s roadster=%s easy=%s legacy=%s shiftBinds=%d')
+                    :format(tostring(state.gravitateVehicleActive),tostring(state.gravitateVehicleMode),
+                        tostring(state.shiftBoostActive),tostring(state.rocketCarActive),
+                        tostring(state.roadsterActive),tostring(state.easyHandlingActive),
+                        tostring(_G.PqLmYgZxWvTrHs),bindCount))
                 _G._mirageShiftDiagRunning=false
                 return
             end
@@ -57,11 +61,11 @@ if _G._mirageMenuRunning then
         local menu = rawget(_G, 'Menu')
         if type(menu) ~= 'table' or type(menu.State) ~= 'table'
             or type(menu.Helpers) ~= 'table' or type(menu.Actions) ~= 'table' then
-            
+            print('[Mirage hotfix] Menu actif introuvable. Charge lapsus_fixed.lua d abord.')
             return
         end
         if _G._mirageTpWeaponHotfix then
-            
+            print('[Mirage hotfix] Deja actif; Movement a ' .. #menu.Helpers.GetMovementOptions() .. ' lignes.')
             return
         end
 
@@ -85,7 +89,7 @@ if _G._mirageMenuRunning then
         menu.Actions.TpWay = function()
             local blip = GetFirstBlipInfoId(8)
             if not blip or blip == 0 or not DoesBlipExist(blip) then
-                
+                print('[Mirage hotfix] Place un waypoint.')
                 return false
             end
             local target = GetBlipInfoIdCoord(blip)
@@ -100,11 +104,11 @@ if _G._mirageMenuRunning then
                 Wait(0)
             end
             if not found then
-                
+                print('[Mirage hotfix] Sol non charge; TP annule.')
                 return false
             end
             SetEntityCoordsNoOffset(entity, target.x, target.y, ground + 1.0, false, false, false)
-            
+            print('[Mirage hotfix] TP Way effectue.')
             return true
         end
 
@@ -124,7 +128,9 @@ if _G._mirageMenuRunning then
         end
 
         _G._mirageTpWeaponHotfix = true
-        
+        print(('[Mirage hotfix] Actif; Movement=%d; spread=%s; recoil=%s; camera=%s')
+            :format(#menu.Helpers.GetMovementOptions(), type(SetWeaponAccuracySpread),
+                type(SetWeaponRecoilShakeAmplitude), type(SetGameplayCamRelativePitch)))
     end
 -- END MIRAGE ACTIVE INSTANCE HOTFIX
     if Menu and Menu.Actions then
@@ -6359,17 +6365,17 @@ function Menu.Actions.SetPutinDeathscreenSuppressed(enable, resource)
         payload=[=[
 local key='codex:deathscreen-only'
 if type(DeathSystem)~='table' or type(DeathSystem.functions)~='table' then
-    
+    print('[deathscreen] DeathSystem indisponible dans Putin.')
     return
 end
 if _G._codexDeathscreenOnlyActive then return end
 local register=DeathSystem.functions.RegisterDeathScreenSuppressor
 if type(register)~='function' then
-    
+    print('[deathscreen] Fonction de suppression introuvable.')
     return
 end
 local ok,err=pcall(register,key,function() return true end)
-if not ok then ;return end
+if not ok then print('[deathscreen] Echec : '..tostring(err));return end
 _G._codexDeathscreenOnlyActive=true
 if type(_M9J)=='function' then
     _M9J()
@@ -6382,7 +6388,7 @@ else
     TriggerEvent('putin-ui:SendNUIMessage','gamedeath',{show=false})
 end
 TriggerEvent('putin-ui:SetNuiFocus',false)
-
+print('[deathscreen] Ecran de mort masque.')
 ]=]
     else
         payload=[=[
@@ -6391,12 +6397,12 @@ if type(DeathSystem)=='table' and type(DeathSystem.DeathScreenSuppressors)=='tab
     DeathSystem.DeathScreenSuppressors[key]=nil
 end
 _G._codexDeathscreenOnlyActive=nil
-
+print('[deathscreen] Blocage de l ecran de mort desactive.')
 ]=]
     end
     local ok,result=pcall(api.InjectResource,resource,payload)
     if not ok or result==false then
-        
+        print('[deathscreen] Injection echouee : '..tostring(result))
         return false
     end
     Menu.State.putinDeathscreenSuppressed=enable==true
@@ -6990,14 +6996,14 @@ local ok,err=pcall(function()
     end
     if applied==0 then error('Aucune variation appliquee : '..table.concat(failures,' | ')) end
 end)
-if not ok then  end
+if not ok then print('[texture] Erreur : '..tostring(err)) end
 ]====]
         local sent,err=Lapsus_InjectResource_compat(target,code)
         if sent==false then error(err or "Execution refusee par Lapsus.") end
         return true
     end)
     if not ok then
-        
+        print("[texture] Erreur : "..tostring(result))
         ShowDynastyNotification("[ PED ] Variation impossible : voir F8")
         return false
     end
@@ -7658,7 +7664,7 @@ function Menu.Actions.ApplyRedsidePed(modelName)
         if model then pcall(SetModelAsNoLongerNeeded, model) end
         Menu.State.redsideModelLoading = false
         if not ok then
-            
+            print('[REDSIDE] ' .. tostring(message))
             message = 'Erreur de changement : detail dans F8'
         end
         ShowDynastyNotification('[ REDSIDE ] ' .. message)
@@ -7831,7 +7837,7 @@ function Menu.Actions.ReviveSeed(target)
     handler=AddEventHandler(ack,function(success,message)
         if handler then RemoveEventHandler(handler);handler=nil end
         Menu.State.seedRevivePending=false
-        
+        print("[ REVIVE SEED ] "..tostring(message))
         ShowDynastyNotification(success and "[ REVIVE SEED ] Vivant / ecran de mort ferme" or "[ REVIVE SEED ] Echec : voir F8")
     end)
     local code=("local ack=%q\n"):format(ack) .. Menu.Helpers.SeedReviveLifecycle .. [====[
@@ -7881,7 +7887,7 @@ end
     if not ok or sent==false then
         if handler then RemoveEventHandler(handler);handler=nil end
         Menu.State.seedRevivePending=false
-        
+        print("[ REVIVE SEED ] Injection refusee : "..tostring(ok and err or sent))
         ShowDynastyNotification("[ REVIVE SEED ] Envoi impossible : voir F8")
         return false
     end
@@ -8777,13 +8783,13 @@ function Menu.Actions.GiveVipWeaponPerm(weaponName, displayName)
     local hash=GetHashKey(weapon)
     local ok,err=pcall(GiveWeaponToPed,ped,hash,250,false,false)
     if not ok then
-        
+        print('[vip-give] Echec '..weapon..' : '..tostring(err))
         ShowDynastyNotification('[ VIP GIVE ] Echec : '..(displayName or weapon))
         return false
     end
     local checked,hasWeapon=pcall(HasPedGotWeapon,ped,hash,false)
     if not checked or not hasWeapon then
-        
+        print('[vip-give] Arme non recue : '..weapon)
         ShowDynastyNotification('[ VIP GIVE ] Echec : '..(displayName or weapon))
         return false
     end
@@ -10594,7 +10600,7 @@ do
                 local cache = type(playerData) == 'table' and rawget(playerData, 'cache')
                 if type(cache) == 'table' and rawget(cache, 'playerid') == player then
                     if data and data ~= playerData then
-                        
+                        print('[ GOD MODE ] Plusieurs contextes joueur possibles : activation annulee.')
                         return
                     end
                     framework, data = candidate, playerData
@@ -10611,13 +10617,13 @@ do
     end
 
     if not data then
-        
+        print('[ GOD MODE ] Contexte joueur Putin introuvable.')
         return
     end
     if not data.PassJoin or not DoesEntityExist(ped) then
-        ;return
+        print('[ GOD MODE ] Joueur Putin non initialise.');return
     end
-    if IsEntityDead(ped) then ;return end
+    if IsEntityDead(ped) then print('[ GOD MODE ] Personnage mort : utilise Revive avant le God Mode.');return end
 
     local previous=_G[key]
     if previous and type(previous.dispose)=='function' then previous.dispose() end
@@ -10643,16 +10649,16 @@ do
     end
     if type(CanPedRagdoll) ~= 'function' or type(SetPedCanRagdoll) ~= 'function'
         or type(SetPedCanRagdollFromPlayerImpact) ~= 'function' then
-        
+        print('[ GOD MODE ] Natives ragdoll Putin indisponibles.')
         return
     end
     local ragdollPed, ragdollModel, previousRagdoll
     local function restoreRagdoll()
         if ragdollPed and DoesEntityExist(ragdollPed) and GetEntityModel(ragdollPed) == ragdollModel then
             local ok, err = pcall(SetPedCanRagdoll, ragdollPed, previousRagdoll)
-            if not ok then  end
+            if not ok then print('[ GOD MODE ] Restauration ragdoll impossible : ' .. tostring(err)) end
             local impactOk, impactErr = pcall(SetPedCanRagdollFromPlayerImpact, ragdollPed, true)
-            if not impactOk then  end
+            if not impactOk then print('[ GOD MODE ] Restauration des impacts impossible : ' .. tostring(impactErr)) end
         end
         ragdollPed, ragdollModel, previousRagdoll = nil, nil, nil
     end
@@ -10689,7 +10695,7 @@ do
                     SetEntityCanBeDamaged(current,not protected)
                 end
             end)
-            if not ok then  end
+            if not ok then print('[ GOD MODE ] Erreur arret : '..tostring(err)) end
         end
         if stopHandler and type(RemoveEventHandler)=='function' then RemoveEventHandler(stopHandler) end
         if _G[key]==controller then _G[key]=nil end
@@ -10715,7 +10721,7 @@ do
             TriggerEvent('gamemode:setInvincible',true,marker)
         end
         if ownsMarker and (data.invincibleType~=marker or not truth(data.invincibleServer)) then
-            
+            print('[ GOD MODE ] Protection remplacee par Putin : maintien arrete.')
             controller.dispose();return
         end
         -- Model changes reset native protection; Putin's ped cache may update later.
@@ -10743,7 +10749,7 @@ do
         maintain()
     end)
     if not ok then
-        
+        print('[ GOD MODE ] Erreur activation : '..tostring(err))
         controller.dispose();return
     end
     _G[key]=controller
@@ -10756,7 +10762,7 @@ do
             if not running then return end
             local ok,err=pcall(maintain)
             if not ok then
-                
+                print('[ GOD MODE ] Erreur maintien : '..tostring(err))
                 controller.dispose();return
             end
         end
@@ -11000,7 +11006,7 @@ function Menu.Actions.ReviveWithPutin()
 if type(DeathSystem) ~= 'table'
     or type(DeathSystem.functions) ~= 'table'
     or type(DeathSystem.functions.RevivePlayer) ~= 'function' then
-    
+    print('[revive] Fonction RevivePlayer introuvable dans Putin.')
     return
 end
 
@@ -11011,9 +11017,9 @@ end
 
 local ok, err = pcall(DeathSystem.functions.RevivePlayer, { revive = true, type = 'classic' })
 if not ok then
-    
+    print('[revive] Echec : ' .. tostring(err))
 else
-    
+    print('[revive] Revive local lance.')
 end
 ]=]
 
@@ -17753,7 +17759,8 @@ do
                         local ok,value=pcall(GetWeaponRecoilShakeAmplitude,hash)
                         recoilReadback=ok and tostring(value) or 'error'
                     end
-                    
+                    print(('[MIRAGE WEAPON DIAG] applied weapon=%s spread=%s recoil=%s readback=%s/%s')
+                        :format(tostring(hash),tostring(spread),tostring(recoil),spreadReadback,recoilReadback))
                 end
             else
                 lastDiagnostic=nil
@@ -19042,7 +19049,7 @@ do
                 local ok, err = pcall(updateTargetMode)
                 if not ok then
                     state.gravitateVehicleActive = false
-                    
+                    print('[GRAVITY TARGET] ' .. tostring(err))
                     ShowDynastyNotification('[ GRAVITY TARGET ] Erreur : voir F8')
                     break
                 end
@@ -22885,7 +22892,7 @@ local model = GetHashKey(modelName)
 local function installShopTest()
     if _pedChimpShopTest then
         if _pedChimpShopTest.model == model then return true end
-        
+        print('[ped-only] Un autre test boutique est deja installe : annuler avant de continuer.')
         return false
     end
     local original
@@ -22977,14 +22984,15 @@ local function installShopTest()
                     location = ('%s:%s'):format(info.short_src or '?', tostring(info.linedefined))
                 end
             end
-            
+            print(('[ped-only] Candidat boutique %s (%s).'):format(candidates[candidate].hooks[1].name, location))
         end
-        
+        print('[ped-only] Plusieurs controles boutique possibles : essai annule.')
         return false
     end
 
     if not original then
-        
+        print(('[ped-only] Controle boutique introuvable (%d fonctions, %d environnements Lua, ressource %s).')
+            :format(functionCount, #environments, GetCurrentResourceName()))
         return false
     end
 
@@ -23032,13 +23040,14 @@ local function applyTexture(ped)
                 applied = applied + 1
                 
             else
-                
+                print(('[texture] Changement non confirme sur le composant %d.')
+                    :format(component))
             end
         end
     end
 
     if applied == 0 then
-        
+        print('[texture] Aucune variante appliquee : index indisponible sur les composants actuels.')
     end
 end
 
@@ -23050,7 +23059,7 @@ Citizen.CreateThread(function()
         while not HasModelLoaded(model) do
             if pedOperation~=(_G._miragePedRevision or 0) then return end
             if (GetGameTimer() - started) % 4294967296 >= 5000 then
-                
+                print('[ped-only] Chargement trop long : changement annule.')
                 return
             end
             Wait(0)
@@ -23085,19 +23094,19 @@ Citizen.CreateThread(function()
                 end
             end
             if consecutiveMisses == 0 then
-                
+                print('[ped-only] Modele confirme en fin de test.')
             elseif consecutiveMisses >= 3 then
-                
+                print('[ped-only] Modele non observe lors des trois derniers releves.')
             else
-                
+                print('[ped-only] Etat du modele incertain en fin de test.')
             end
         else
-            
+            print('[ped-only] Le modele n a pas ete applique.')
         end
     end)
     if pedOperation==(_G._miragePedRevision or 0) then _pedOnlyRunning=nil end
     SetModelAsNoLongerNeeded(model)
-    if not ok then  end
+    if not ok then print('[ped-only] Erreur : ' .. tostring(err)) end
 end)
 ]=====]
 
@@ -23494,138 +23503,25 @@ CreateThread(function()
 end)
 
 Menu.State.staffAbuseActive = false
-function Menu.Actions.SetStaffAbuse(enable)
-    enable=enable==true
-    local ok,result=pcall(function()
-        local api = rawget(_G, "Lapsus") or Lapsus
-        if not api or type(api.GetResources)~="function" or type(Lapsus_InjectResource_compat)~="function" then error("API Lapsus indisponible.") end
-        local target
-        for _,name in ipairs(api.GetResources()) do
-            if type(name)=="string" and name:lower()=="putin" then target=name;break end
-        end
-        if not target then error("Ressource Putin introuvable.") end
-        local code=("local enabled=%s\n"):format(tostring(enable)) .. [====[
 do
-    local key='_mirageStaffWeaponsController'
-    local previous=_G[key]
-    if previous and type(previous.dispose)=='function' then previous.dispose() end
-    if not enabled then return end
-    local framework
-    local environments, seen = {}, {}
-    local function addEnvironment(globals)
-        if type(globals) == 'table' and not seen[globals] then
-            seen[globals] = true
-            environments[#environments + 1] = globals
-        end
-    end
-    addEnvironment(_ENV)
-    addEnvironment(_G)
-
-    local player = PlayerId()
-    for _, globals in ipairs(environments) do
-        local metatable = getmetatable(globals)
-        if type(metatable) == 'table' then addEnvironment(rawget(metatable, '__index')) end
-        for _, candidate in next, globals do
-            if type(candidate) == 'table'
-                and type(rawget(candidate, 'ShowNotification')) == 'function'
-                and type(rawget(candidate, 'GetGameInstanceType')) == 'function' then
-                local data = rawget(candidate, 'PlayerData')
-                local cache = type(data) == 'table' and rawget(data, 'cache')
-                if type(cache) == 'table' and rawget(cache, 'playerid') == player then
-                    if framework and framework ~= candidate then
-                        
-                        return
-                    end
-                    framework = candidate
+    local workerRunning = false
+    function Menu.Actions.SetStaffAbuse(enable)
+        Menu.State.staffAbuseActive = enable == true
+        if Menu.State.staffAbuseActive and not workerRunning then
+            workerRunning = true
+            CreateThread(function()
+                local unarmed = GetHashKey('WEAPON_UNARMED')
+                while Menu.State.staffAbuseActive do
+                    local ped = PlayerPedId()
+                    if DoesEntityExist(ped) then RemoveWeaponFromPed(ped, unarmed) end
+                    Wait(250)
                 end
-            end
+                workerRunning = false
+            end)
         end
-    end
-
-    if not framework then
-        
-        return
-    end
-    if type(SetCurrentPedWeapon) ~= 'function' or type(GetSelectedPedWeapon) ~= 'function' then
-        
-        return
-    end
-    local originalSet,originalNotify=SetCurrentPedWeapon,framework.ShowNotification
-    local controller={active=true}
-    local unarmed=GetHashKey('WEAPON_UNARMED')
-    local function same(a,b)return type(a)=='number' and type(b)=='number' and a%4294967296==b%4294967296 end
-    local function inRestrictedService()
-        local data=framework.PlayerData
-        local service=AdminSystem and AdminSystem.Service
-        return data and service and service.enabled==true and data.group
-            and data.group~='admin' and data.group~='elite' and data.group~='owner'
-    end
-    local setWrapper=function(ped,weapon,...)
-        if controller.active and inRestrictedService() and ped==PlayerPedId() and same(weapon,unarmed) then
-            local info=debug and type(debug.getinfo)=='function' and debug.getinfo(2,'f')
-            local caller=info and info.func
-            -- Once identified by its real notification, stop this specific routine before holstering.
-            if caller and caller==controller.staffRoutine then
-                controller.pending=nil
-                return
-            end
-            local selected=GetSelectedPedWeapon(ped)
-            if not same(selected,unarmed) and not same(selected,-2009644972) then
-                controller.pending={ped=ped,weapon=selected,time=GetGameTimer(),caller=caller}
-            end
-        end
-        return originalSet(ped,weapon,...)
-    end
-    local notifyWrapper=function(message,...)
-        if controller.active and inRestrictedService() and message=="Vous ne pouvez pas sortir d'arme en étant en service" then
-            local info=debug and type(debug.getinfo)=='function' and debug.getinfo(2,'f')
-            local caller=info and info.func
-            if caller and caller==controller.staffRoutine and not same(GetSelectedPedWeapon(PlayerPedId()),unarmed) then return end
-            local pending=controller.pending
-            controller.pending=nil
-            if pending and pending.ped==PlayerPedId() and (GetGameTimer()-pending.time)%4294967296<=100 then
-                if caller and caller==pending.caller then
-                    controller.staffRoutine=caller
-                elseif not controller.identificationErrorReported then
-                    controller.identificationErrorReported=true
-                    
-                end
-                -- Restore at most the first identification pass; later passes never switch weapons.
-                if same(GetSelectedPedWeapon(pending.ped),unarmed) then
-                    local ok,err=pcall(originalSet,pending.ped,pending.weapon,true)
-                    if not ok and not controller.errorReported then
-                        controller.errorReported=true
-                        
-                    end
-                end
-                if same(GetSelectedPedWeapon(pending.ped),pending.weapon) then return end
-            end
-        end
-        return originalNotify(message,...)
-    end
-    function controller.dispose()
-        controller.active=false;controller.pending=nil
-        if SetCurrentPedWeapon==setWrapper then SetCurrentPedWeapon=originalSet end
-        if framework.ShowNotification==notifyWrapper then framework.ShowNotification=originalNotify end
-        if _G[key]==controller then _G[key]=nil end
-    end
-    SetCurrentPedWeapon=setWrapper
-    framework.ShowNotification=notifyWrapper
-    _G[key]=controller
-end
-]====]
-        local sent,err=Lapsus_InjectResource_compat(target,code)
-        if sent==false then error(err or "Execution refusee par Lapsus.") end
+        ShowDynastyNotification(Menu.State.staffAbuseActive and "Staff Abuse ON" or "Staff Abuse OFF")
         return true
-    end)
-    if not ok then
-        
-        ShowDynastyNotification("[ ARMES SERVICE ] Impossible : voir F8")
-        return false
     end
-    Menu.State.staffAbuseActive=enable
-    ShowDynastyNotification(enable and "[ ARMES SERVICE ] Activation demandee" or "[ ARMES SERVICE ] OFF")
-    return true
 end
 
 -- Vehicle color picker. Hue and saturation/value stay selected across Apply calls.
@@ -23648,7 +23544,7 @@ function Menu.Actions.PickCarColor()
     end
     local color=Menu.State.carColor
     local screenW,screenH=GetActiveScreenResolution()
-    
+    print(('[MIRAGE CAR COLOR POS] screen=%sx%s'):format(tostring(screenW),tostring(screenH)))
     Menu.State.carColorBeforePick={h=color.h,s=color.s,v=color.v,r=color.r,g=color.g,b=color.b}
     Menu.State.carColorPickerActive=true
     Menu.State.carColorPickerOpened=GetGameTimer()
@@ -24691,7 +24587,9 @@ function ExecuteMenuAction(menu, index, listOverride)
                 return
             end
             if st=="noSpreadActive" or st=="noRecoilActive" then
-                
+                print(("[MIRAGE WEAPON DIAG] %s spread=%s recoil=%s camera=%s weapon=%s")
+                    :format(st,type(SetWeaponAccuracySpread),type(SetWeaponRecoilShakeAmplitude),
+                        type(SetGameplayCamRelativePitch),tostring(GetSelectedPedWeapon(PlayerPedId()))))
             end
             Menu.State[st] = not Menu.State[st]
             local on = Menu.State[st]
@@ -26687,7 +26585,7 @@ CreateThread(function()
     local function nativeFailure(reason)
         if GetGameTimer() - lastNativeFailure >= 3000 then
             ShowDynastyNotification('[ SHOOT VISION ] ' .. reason)
-            
+            print('[ SHOOT VISION NATIF ] ' .. reason)
             lastNativeFailure = GetGameTimer()
         end
         return false
@@ -26773,7 +26671,7 @@ CreateThread(function()
             pcall(SetEntityVisible, vehicle, carWasVisible, false)
         end
         if not ok then
-            
+            print('[ SHOOT VISION NATIF ] ' .. tostring(err))
             return nativeFailure('Erreur tir natif : voir F8')
         end
         if not fired then return nativeFailure('Siege conducteur non confirme') end
@@ -28089,7 +27987,7 @@ end, false)
                 end
             end)
             busy=false
-            if not ok then ;notify('Erreur : voir F8') end
+            if not ok then print('[REVOLUTION] '..tostring(err));notify('Erreur : voir F8') end
         end)
     end
     local function removeCompanions()
@@ -28202,7 +28100,7 @@ end
 
 local function say(message)
     S.lastMessage = tostring(message)
-    
+    Lapsus.print("[Mirage Auto Farm] " .. S.lastMessage)
 end
 
 local function now() return GetGameTimer() end
@@ -28664,7 +28562,7 @@ publish(true)
         local header = ("local requestEvent, replyEvent = %q, %q\n"):format(request, reply)
         local ok, accepted, reason = pcall(Lapsus_InjectResource_compat, "Putin", header .. payload)
         if not ok or not accepted then
-            
+            print("[Mirage Auto Farm] " .. tostring(ok and reason or accepted))
             disconnect("Ressource Putin indisponible")
         end
     end
@@ -29083,7 +28981,9 @@ function Menu.Helpers.BuildNuiSnapshot()
     end
     if menu == "MOVEMENT" and not _G._mirageMovementSnapshotLogged then
         _G._mirageMovementSnapshotLogged = true
-        
+        print(("[MIRAGE NUI DIAG] Movement rows=%d; last=%s; spread=%s; recoil=%s")
+            :format(#rows, tostring(rows[#rows] and rows[#rows].label),
+                type(SetWeaponAccuracySpread), type(SetWeaponRecoilShakeAmplitude)))
     end
     local tabs,active=tabsFor(menu,S)
     local banner=Menu.Banner and Menu.Banner.imageUrl or (base..'/assets/mirage-banner.png?v=21')
@@ -29344,10 +29244,11 @@ Citizen.CreateThread(function()
                             pcall(Lapsus.SendNuiMessage,oldId,payload)
                         end
                         local destroyed,result=pcall(Lapsus.DestroyNui,oldId)
-                        
+                        print(('[MIRAGE NUI RESET] %s ok=%s result=%s'):format(oldId,
+                            tostring(destroyed),tostring(result)))
                     end
                 else
-                    
+                    print('[MIRAGE NUI RESET] DestroyNui indisponible')
                 end
             end
             local ok,accepted=pcall(Lapsus.CreateNui,'mirage_live_menu_v49',base..'/index-v49.html?transport=direct')
@@ -29416,7 +29317,7 @@ Citizen.CreateThread(function()
                     local accepted=send('snapshot',snapshot)
                     if S.currentMenu=='MOVEMENT' and not _G._mirageMovementSendLogged then
                         _G._mirageMovementSendLogged=true
-                        
+                        print('[MIRAGE NUI DIAG] snapshot sent='..tostring(accepted)..'; rows='..tostring(#snapshot.rows))
                     end
                 end
                 lastContext=context;lastList=now;lastValueRevision=valueRevision
