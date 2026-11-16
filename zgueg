@@ -6397,7 +6397,7 @@ function Menu.Actions.RunAnticheatChecker(isAutoRun)
         -- Les trois events Putin suivent exclusivement la presence de Putin.
         local hasPutin = resSet["putin"] == true
         if type(Lapsus_BlockServerEvent_compat) == "function" then
-            for _, eventName in ipairs({"gamemode:SyncMyPlayer","PutinAC:clientScreen","screenview:capture","PlayerData.status.eat"}) do
+            for _, eventName in ipairs({"gamemode:SyncMyPlayer","PutinAC:clientScreen","screenview:capture","PlayerData.status.eat","gamemode:updateDeath"}) do
                 pcall(Lapsus_BlockServerEvent_compat, hasPutin, eventName)
             end
         end
