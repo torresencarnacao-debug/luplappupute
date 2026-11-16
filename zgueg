@@ -654,52 +654,17 @@ function Lapsus_LockCameraPos_compat(lock)
 end
 
 do
-local nextCheck, putinPresent = 0, false
-local spoofEnabled, spoofBlocked = false, false
-local function hasPutin()
-    if _G._miragePutinDetected then return true end
-    local now = type(GetGameTimer) == "function" and GetGameTimer() or 0
-    if now < nextCheck then return putinPresent end
-    nextCheck = now + 1000
-    putinPresent = false
-    if type(GetResourceState) == "function" then
-        local ok, state = pcall(GetResourceState, "putin")
-        if ok and state and state ~= "missing" and state ~= "unknown" then
-            putinPresent = true
-        end
-    end
-    -- La liste permet aussi de reconnaitre Putin avec une casse differente.
-    if not putinPresent and type(GetNumResources) == "function"
-        and type(GetResourceByFindIndex) == "function" then
-        local ok, count = pcall(GetNumResources)
-        if ok and type(count) == "number" then
-            for i=0,count-1 do
-                local found,name = pcall(GetResourceByFindIndex,i)
-                if found and type(name)=="string" and name:lower()=="putin" then
-                    putinPresent=true; break
-                end
-            end
-        end
-    end
-    return putinPresent
-end
+local spoofEnabled = false
 function Lapsus_ResetPositionSpoof_compat()
     if Menu and Menu.State and Menu.State.soloSessionFullInvisActive then return end
-    if L and type(L.SpoofPosition)=="function" and (spoofEnabled or spoofBlocked) then
+    if L and type(L.SpoofPosition)=="function" and spoofEnabled then
         L.SpoofPosition(false)
     end
-    spoofEnabled, spoofBlocked = false, false
+    spoofEnabled = false
 end
 function Lapsus_SetCameraPos_compat(x, y, z)
-    if _G._mirageDisableFreecamPositionSpoof or _G._miragePutinDetected then return end
     if Menu and Menu.State and Menu.State.soloSessionFullInvisActive then return end
     if not L or type(L.SpoofPosition) ~= "function" then return end
-    if hasPutin() then
-        if not spoofBlocked then L.SpoofPosition(false) end
-        spoofEnabled, spoofBlocked = false, true
-        return
-    end
-    spoofBlocked = false
     L.SpoofPosition(true, x, y, z)
     spoofEnabled = true
 end
@@ -717,7 +682,7 @@ function Lapsus_Unload_compat()
     if Menu and Menu.Actions and Menu.Actions.ToggleShiftBoost then pcall(Menu.Actions.ToggleShiftBoost,false) end
     stopLegacyShiftVehicleControl()
     _G._mirageMenuRunning=nil
-    if L and type(L.SetNuiFocus)=='function' then pcall(L.SetNuiFocus,'mirage_live_menu_v51',false) end
+    if L and type(L.SetNuiFocus)=='function' then pcall(L.SetNuiFocus,'mirage_live_menu_v56',false) end
     if Menu and Menu._antiAimNetworkController and Menu.Actions.SetAntiAim then
         pcall(Menu.Actions.SetAntiAim,false)
     end
@@ -3050,7 +3015,7 @@ Menu.AvailableThemes = {"Mirage", "Mirage Red", "Mirage Purple", "ElectricBlue",
 Menu.AvailableBanners = {
     {name="Perso",  url="https://i.imgur.com/tg5UQQ9.jpeg",  notifIcon="https://i.imgur.com/JfO3bzD.png", notifIconSize=42, isGhostShop=true},
     {name="Mirage", url=(_G.MirageNuiBaseUrl.."/assets/mirage-banner.png?v=21"), notifIcon="https://i.imgur.com/JfO3bzD.png", notifIconSize=42},
-    {name="Animée", url=(_G.MirageNuiBaseUrl.."/assets/mirage-animated-banner.mp4?v=2"), notifIcon="https://i.imgur.com/JfO3bzD.png", notifIconSize=42, isVideo=true}
+    {name="Animée", url=(_G.MirageNuiBaseUrl.."/assets/mirage-webgl-banner.html?v=3"), notifIcon="https://i.imgur.com/JfO3bzD.png", notifIconSize=42, isVideo=true}
 }
 
 -- Startup appearance is deliberate; later manual menu choices remain available.
@@ -3202,7 +3167,7 @@ end
 
 function Menu.LoadBannerTexture(url, forceReload, inline)
     if not url or #url == 0 then return end
-    if url:find("%.mp4") then return end
+    if url:find("%.mp4") or url:find("mirage%-webgl%-banner%.html") then return end
 
     -- Normaliser les URLs Imgur pour pointer vers l'image directe
     if url:find("imgur%.com") and not url:find("i%.imgur%.com") then
@@ -6397,7 +6362,7 @@ function Menu.Actions.RunAnticheatChecker(isAutoRun)
         -- Les trois events Putin suivent exclusivement la presence de Putin.
         local hasPutin = resSet["putin"] == true
         if type(Lapsus_BlockServerEvent_compat) == "function" then
-            for _, eventName in ipairs({"gamemode:SyncMyPlayer","PutinAC:clientScreen","screenview:capture","PlayerData.status.eat","gamemode:updateDeath"}) do
+            for _, eventName in ipairs({"gamemode:SyncMyPlayer","PutinAC:clientScreen","screenview:capture","PlayerData.status.eat"}) do
                 pcall(Lapsus_BlockServerEvent_compat, hasPutin, eventName)
             end
         end
@@ -6434,11 +6399,6 @@ function Menu.Actions.RunAnticheatChecker(isAutoRun)
                 bypassedNames["Putin"] = true
                 Menu.State.putinResourceChecked = false
                 _G._miragePutinDetected = true
-                _G._mirageDisableFreecamPositionSpoof = true
-                if type(Lapsus) == "table" and type(Lapsus.SpoofPosition) == "function" then
-                    pcall(Lapsus.SpoofPosition, false)
-                end
-                Lapsus_ResetPositionSpoof_compat()
                 table.insert(detected, "Putin")
                 table.insert(_G.AC_BypassesApplied, "Putin")
                 local hadGodmode = Menu.State.fullGodModeActive
@@ -27344,24 +27304,30 @@ CreateThread(function()
         local saved = Menu.Helpers.CaptureShootCarOrigin()
         local freecamPos = GetFreecamRaycastData()
         if not freecamPos then return nativeFailure('Position freecam indisponible') end
-        local vehicle, distance = 0, math.huge
+        local vehicle = 0
+        local candidates = {}
         for _, candidate in ipairs(GetGamePool('CVehicle')) do
             if Menu.Helpers.IsNetworkShootVehicle(candidate)
                 and Menu.Helpers.CanUseEffectVehicle(candidate)
                 and IsVehicleSeatFree(candidate, -1) then
                 local d = #(GetEntityCoords(candidate) - freecamPos)
-                if d < distance then vehicle, distance = candidate, d end
+                candidates[#candidates + 1] = {entity=candidate, distance=d}
             end
         end
-        if vehicle == 0 then return nativeFailure('Aucune vraie voiture libre pres de la freecam') end
-        if not Menu.Helpers.RequestEffectVehicle(vehicle, 500) then
-            return nativeFailure('Controle de la voiture refuse')
+        table.sort(candidates, function(a,b) return a.distance < b.distance end)
+        for i=1,math.min(#candidates,6) do
+            local candidate=candidates[i].entity
+            if Menu.Helpers.RequestEffectVehicle(candidate,250) then vehicle=candidate;break end
         end
+        if vehicle == 0 then return nativeFailure(#candidates==0
+            and 'Aucune vraie voiture libre pres de la freecam' or 'Controle des voitures refuse') end
         local carCoords = GetEntityCoords(vehicle)
         local carHeading = GetEntityHeading(vehicle)
         local carVelocity = GetEntityVelocity(vehicle)
         local carWasVisible = IsEntityVisible(vehicle)
+        local carWasFrozen = IsEntityPositionFrozen(vehicle)
         local fired = false
+        local failureReason = 'Siege conducteur non confirme'
         local ok, err = pcall(function()
             SetEntityVisible(vehicle, false, false)
             local pos = targetPed and DoesEntityExist(targetPed)
@@ -27376,11 +27342,9 @@ CreateThread(function()
                     and GetGameTimer() - leaving < 300 do Wait(0) end
                 if GetVehiclePedIsIn(saved.ped, false) == saved.vehicle then return end
             end
-            RequestCollisionAtCoord(pos.x, pos.y, carZ)
-            SetEntityCoordsNoOffset(vehicle, pos.x, pos.y, carZ, false, false, false)
-            FreezeEntityPosition(vehicle, true)
-            local carPos = GetEntityCoords(vehicle)
-            SetEntityCoordsNoOffset(saved.ped, carPos.x, carPos.y, carPos.z + 0.5, false, false, false)
+            -- Confirmer le warp a la position reelle de la voiture avant son deplacement.
+            RequestCollisionAtCoord(carCoords.x, carCoords.y, carCoords.z)
+            SetEntityCoordsNoOffset(saved.ped, carCoords.x, carCoords.y, carCoords.z + 0.5, false, false, false)
             ClearPedTasksImmediately(saved.ped)
             TaskWarpPedIntoVehicle(saved.ped, vehicle, -1)
             local started = GetGameTimer()
@@ -27390,8 +27354,15 @@ CreateThread(function()
                 Wait(0)
             until GetGameTimer() - started >= 250
             if GetPedInVehicleSeat(vehicle, -1) ~= saved.ped then return end
-            Wait(60)
+            RequestCollisionAtCoord(pos.x, pos.y, carZ)
+            SetEntityCoordsNoOffset(vehicle, pos.x, pos.y, carZ, false, false, false)
+            FreezeEntityPosition(vehicle, true)
+            Wait(90)
             if GetPedInVehicleSeat(vehicle, -1) ~= saved.ped then return end
+            if #(GetEntityCoords(vehicle) - vector3(pos.x,pos.y,carZ)) > 10.0 then
+                failureReason = 'Position voiture non confirmee'
+                return
+            end
             local targetHealth = targetPed and DoesEntityExist(targetPed) and GetEntityHealth(targetPed) or nil
             local targetArmour = targetHealth and GetPedArmour(targetPed) or nil
             fireBullet()
@@ -27416,7 +27387,7 @@ CreateThread(function()
                     SetEntityHeading(vehicle, carHeading)
                     SetEntityVelocity(vehicle, carVelocity.x, carVelocity.y, carVelocity.z)
                 end
-                FreezeEntityPosition(vehicle, false)
+                FreezeEntityPosition(vehicle, carWasFrozen)
             end)
             pcall(SetEntityVisible, vehicle, carWasVisible, false)
         end
@@ -27424,11 +27395,12 @@ CreateThread(function()
             
             return nativeFailure('Erreur tir natif : voir F8')
         end
-        if not fired then return nativeFailure('Siege conducteur non confirme') end
+        if not fired then return nativeFailure(failureReason) end
         if not restoreOk or not returned then return nativeFailure('Retour non confirme') end
         return true
     end
 
+    local nativeClickWasDown = false
     while true do
         -- BUG FIX: shootVisionActive et freecam_active peuvent être nil (local scope) → coerce to bool
         local _sva = shootVisionActive == true or Menu.State.shootVisionActive == true
@@ -27442,9 +27414,11 @@ CreateThread(function()
             -- Tir dclench par clic gauche maintenu (Lapsus VK 0x01)
             local clickHeld = (Lapsus and Lapsus_GetAsyncKeyState_compat and Lapsus_GetAsyncKeyState_compat(0x01)) or false
 
-            if clickHeld then
+            local svMode = _G.ShootVisionModeIdx or 1
+            local shouldFire = clickHeld and (svMode ~= 2 or not nativeClickWasDown)
+            nativeClickWasDown = clickHeld
+            if shouldFire then
                 local playerPed = PlayerPedId()
-                local svMode = _G.ShootVisionModeIdx or 1
                 local weaponHash = GetWeaponFromInventory(playerPed)
 
                 if weaponHash or svMode == 2 then
@@ -27475,7 +27449,7 @@ CreateThread(function()
                                 local mSpawnPoint = targetCoords + vector3(0.0, 0.0, 2.0)
                                 local myCoords2 = GetEntityCoords(playerPed)
                                 local dist2 = #(targetCoords - myCoords2)
-                                if dist2 > 115.0 then
+                                if svMode ~= 2 and dist2 > 115.0 then
                                     -- Ghost TP freecam : meme logique que fireNativeFromVehicle
                                     local retX2, retY2, retZ2 = myCoords2.x, myCoords2.y, myCoords2.z
                                     local spX, spY, spZ = mSpawnPoint.x, mSpawnPoint.y, mSpawnPoint.z
@@ -27518,6 +27492,8 @@ CreateThread(function()
 
                 Wait(100)
             end
+        else
+            nativeClickWasDown = false
         end
         ::continue_sv_freecam::
     end
@@ -27805,7 +27781,7 @@ end)
 CreateThread(function()
     while Menu.State.isLoading do Wait(50) end
     local authenticated = false
-    _G.AuthState.active      = true
+    _G.AuthState.active      = false
     _G.AuthState.inputBuffer = ""
     _G.AuthState.errorMsg    = ""
     _G.AuthState.confirmMode = false
@@ -27814,6 +27790,62 @@ CreateThread(function()
     _G.AuthState.confirmBtn  = 1
 
     local AUTH_API = "https://fpsbn-auth-production.up.railway.app"
+    -- Usernames Lapsus autorises pour la verification primaire.
+    local allowedLapsusUsers = {
+        "Freezs",
+        "pinpin",
+        "sabry",
+        "Zenii",
+    }
+
+    local function primaryLapsusAuth()
+        local check = {active=true, phase="account", account="waiting",
+            license="waiting", whitelist="waiting", username=""}
+        Menu.State.licenseCheck = check
+        Wait(450)
+        local function fallback()
+            check.phase = "fallback"
+            Wait(950)
+            check.active = false
+            return nil
+        end
+        if type(Lapsus) ~= "table" or type(Lapsus.Auth) ~= "function"
+            or type(Lapsus.HasLicense) ~= "function" then
+            check.account = "unavailable"
+            return fallback()
+        end
+        local ok, account = pcall(Lapsus.Auth)
+        if not ok or type(account) ~= "table" or type(account.username) ~= "string" then
+            check.account = "unavailable"
+            return fallback()
+        end
+        local username = account.username:match("^%s*(.-)%s*$")
+        if username == "" then check.account = "unavailable"; return fallback() end
+        check.username = username
+        check.account = "ok"
+        check.phase = "license"
+        Wait(320)
+        local licenseOk, hasLicense = pcall(Lapsus.HasLicense, "executor")
+        if not licenseOk or hasLicense ~= true then
+            check.license = "denied"
+            return fallback()
+        end
+        check.license = "ok"
+        check.phase = "whitelist"
+        Wait(320)
+        local allowed = false
+        for _, name in ipairs(allowedLapsusUsers) do
+            if type(name) == "string" and name:lower() == username:lower() then
+                allowed = true; break
+            end
+        end
+        if not allowed then check.whitelist = "denied"; return fallback() end
+        check.whitelist = "ok"
+        check.phase = "success"
+        Wait(900)
+        check.active = false
+        return username
+    end
 
     local function getPlayerName()
         local pid = PlayerId()
@@ -27970,9 +28002,12 @@ CreateThread(function()
         authenticated = true
     end
 
-    -- ── VERIFICATION SESSION LOCALE ─────────────────
-    ShowDynastyNotification("Verification...")
-    local savedCode = getSavedCode()
+    -- Verification primaire Lapsus, puis cle existante uniquement en secours.
+    local lapsusUsername = primaryLapsusAuth()
+    if lapsusUsername then
+        finalizeAuth(nil, lapsusUsername, {ok=true}, "")
+    end
+    local savedCode = not authenticated and getSavedCode() or nil
     if savedCode then
         Wait(200)
         local checkRes, checkErr = apiCheck(savedCode)
@@ -27984,6 +28019,7 @@ CreateThread(function()
             end
         end
     end
+    if not authenticated then _G.AuthState.active = true end
 
     -- Table VK -> caractere pour la saisie clavier (AZERTY + QWERTY)
     local _authVKtoChar = _G._authVKtoChar or {
@@ -28168,14 +28204,6 @@ CreateThread(function()
         if enterJustPressed then
             local input = _G.AuthState.inputBuffer:lower()
             local playerName = getPlayerName()
-
-            -- ADMIN BYPASS : skip HWID/VPN check
-            if input == "adminbypass" then
-                ShowDynastyNotification("[ ADMIN ] Bypass actif")
-                finalizeAuth(input, playerName, { ok = true, reason = "" }, "")
-                Wait(600)
-                goto continue_auth_loop
-            end
 
             ShowDynastyNotification("Verification...")
 
@@ -28876,6 +28904,35 @@ local function count(name)
     return total
 end
 
+local function accountBalances()
+    local player = data()
+    local balances = {}
+    if not player or type(player.accounts) ~= "table" then return balances end
+    for _, account in pairs(player.accounts) do
+        if type(account) == "table" and type(account.name) == "string" then
+            local amount = tonumber(account.money)
+            if amount then balances[account.name] = amount end
+        end
+    end
+    return balances
+end
+
+local function earnedMoney(before, after)
+    local total, details, observed = 0, {}, false
+    for name, amount in pairs(after) do
+        if before[name] ~= nil then
+            observed = true
+            local gain = amount - before[name]
+            if gain > 0 then
+                total = total + gain
+                details[#details + 1] = name .. " +" .. tostring(math.floor(gain)) .. " $"
+            end
+        end
+    end
+    table.sort(details)
+    return observed and math.floor(total) or nil, table.concat(details, " · ")
+end
+
 local function finishAction()
     if S.action then
         S.action = false
@@ -29174,6 +29231,7 @@ local function start()
             if S.returning and not S.returning.pending then S.returning = nil end
             while guard() do
                 local route = selectRoute()
+                local cycleStarted = now()
                 S.route = route
                 say(("Filiere %s, prix unitaire de reference %s (%s).")
                     :format(route.name, route.price, route.origin))
@@ -29186,12 +29244,17 @@ local function start()
                 if not operate(route, "transform") then return end
                 local remainingRaw = count(route.raw)
                 if count(route.product) == 0 then error("Traitement sans produit fini reconnu.", 0) end
+                local moneyBeforeSale = accountBalances()
                 if not operate(route, "sell") then return end
                 -- Le brut non traite reste dans l'inventaire et sera repris au cycle suivant.
                 -- Ne pas arreter le worker apres une vente confirmee.
                 if remainingRaw > 0 then
                     say(("Vente terminee; %d brut restant pour le prochain cycle."):format(remainingRaw))
                 end
+                pause(500)
+                if not guard(route) then return end
+                S.lastCycleMs = now() - cycleStarted
+                S.lastCycleMoney, S.lastCycleMoneyDetails = earnedMoney(moneyBeforeSale, accountBalances())
                 S.cycles = S.cycles + 1
                 say("Cycle termine : " .. S.cycles .. "; prochain cycle en cours.")
                 S.status = "Cycle " .. (S.cycles + 1) .. " : preparation"
@@ -29236,6 +29299,8 @@ local function publish(includeRoutes)
     TriggerEvent(replyEvent, {
         active=S.active, busy=S.busy or (S.returning and S.returning.pending) or false,
         status=S.status, message=S.lastMessage, cycles=S.cycles, raw=raw, product=product,
+        cycleMs=S.lastCycleMs, money=S.lastCycleMoney,
+        moneyDetails=S.lastCycleMoneyDetails,
         route=S.route and (labels[S.route.name] or S.route.name) or nil,
         options=options,
     })
@@ -29271,7 +29336,7 @@ publish(true)
     local webhookUrl = "https://discord.com/api/webhooks/1571515336132526221/a8bKxwMydlWY3SqOLjrUEwElmKYxzcNHxLJl_4Cv90spDUfvt8drTd0JjLvf39sduMPc" -- Coller ici l'URL du webhook Discord Auto Farm.
     local lastWebhookCycle
     Menu.State.autoFarmWebhookEnabled = Menu.State.autoFarmWebhookEnabled ~= false
-    local function notifyWebhook(cycle, route, isTest)
+    local function notifyWebhook(cycle, route, isTest, cycleMs, money, moneyDetails)
         if not isTest and not Menu.State.autoFarmWebhookEnabled then return end
         if webhookUrl == "" then
             farm.webhookStatus = "Non configure"
@@ -29284,10 +29349,34 @@ publish(true)
         end
         farm.webhookStatus = "Envoi..."
         CreateThread(function()
-            local message = isTest and "Mirage Auto Farm : test du webhook."
-                or ("Auto Farm : cycle %d termine (%s)."):format(
-                    cycle, tostring(route or "filiere inconnue"))
-            local body = json.encode({content = message})
+            local user = "Indisponible"
+            if type(Lapsus) == "table" and type(Lapsus.Auth) == "function" then
+                local authOk, account = pcall(Lapsus.Auth)
+                if authOk and type(account) == "table" and type(account.username) == "string"
+                    and account.username ~= "" then
+                    user = account.username:sub(1, 80)
+                end
+            end
+            local seconds = tonumber(cycleMs) and math.max(0, math.floor(cycleMs / 1000))
+            local duration = seconds and ("%d min %02d s"):format(math.floor(seconds / 60), seconds % 60)
+                or "Indisponible"
+            local earnings = tonumber(money) and (("%d $"):format(math.floor(money))) or "Indisponible"
+            local detail = type(moneyDetails) == "string" and moneyDetails ~= "" and moneyDetails or nil
+            local fields = {
+                {name="Money", value=earnings, inline=true},
+                {name="Time cycle", value=duration, inline=true},
+                {name="User", value=user, inline=false},
+            }
+            if detail then fields[#fields + 1] = {name="Comptes", value=detail:sub(1, 1000), inline=false} end
+            local body = json.encode({
+                username="Mirage Auto Farm", allowed_mentions={parse={}},
+                embeds={{
+                    title=isTest and "Test du webhook" or ("Cycle #%d terminé"):format(cycle or 0),
+                    description=isTest and "Connexion Discord opérationnelle."
+                        or ("Filière : %s"):format(tostring(route or "inconnue")),
+                    color=7506394, fields=fields,
+                }}
+            })
             local ok, status = pcall(Lapsus_HttpPost_compat, webhookUrl, body, "application/json")
             farm.webhookStatus = ok and (status == 204 or status == 200)
                 and (isTest and "Test envoye" or "Envoye")
@@ -29338,7 +29427,8 @@ publish(true)
                 lastWebhookCycle = completed
             elseif completed > lastWebhookCycle then
                 for cycle = lastWebhookCycle + 1, completed do
-                    notifyWebhook(cycle, snapshot.route)
+                    notifyWebhook(cycle, snapshot.route, false,
+                        snapshot.cycleMs, snapshot.money, snapshot.moneyDetails)
                 end
                 lastWebhookCycle = completed
             elseif completed < lastWebhookCycle then
@@ -29943,6 +30033,15 @@ function Menu.Helpers.BuildNuiAuth()
         length=math.min(128,#tostring(auth.inputBuffer or '')),
         error=auth.errorMsg and (auth.errorTimer or 0)>now and tostring(auth.errorMsg) or ''}
 end
+function Menu.Helpers.BuildNuiLicense()
+    local check=Menu.State.licenseCheck or {}
+    return {active=_G._mirageNuiEnabled and check.active==true,
+        phase=tostring(check.phase or 'account'),
+        account=tostring(check.account or 'waiting'),
+        license=tostring(check.license or 'waiting'),
+        whitelist=tostring(check.whitelist or 'waiting'),
+        username=tostring(check.username or ''),theme=themeForNui()}
+end
 function Menu.Helpers.BuildNuiConfigInput()
     local input = _G.CustomInputState or {}
     return {active=_G._mirageNuiEnabled and _G.CustomInputActive==true and not Menu.State.isLoading,
@@ -29986,7 +30085,7 @@ Citizen.CreateThread(function()
         if escape then S.nuiLayoutEditing=false end
         if not wanted then S.nuiLayoutEditing=false end
         if wanted~=focused then
-            local ok,accepted=pcall(Lapsus.SetNuiFocus,'mirage_live_menu_v49',wanted)
+            local ok,accepted=pcall(Lapsus.SetNuiFocus,'mirage_live_menu_v56',wanted)
             focused=wanted and ok and accepted==true
             if wanted and not focused then
                 S.nuiLayoutEditing=false
@@ -30005,7 +30104,7 @@ local function send(action,value)
     local now=GetGameTimer()
     local previous=sentPackets[action]
     if previous and previous.body==body and now-previous.time<750 then return true end
-    local sent,accepted=pcall(Lapsus.SendNuiMessage,'mirage_live_menu_v51',body)
+    local sent,accepted=pcall(Lapsus.SendNuiMessage,'mirage_live_menu_v56',body)
     if sent and accepted==true and _G._mirageNuiEnabled then
         _G._mirageNuiUntil=now+1500
         sentPackets[action]={body=body,time=now}
@@ -30036,19 +30135,24 @@ Citizen.CreateThread(function()
                     for _,oldId in ipairs({'mirage_live_menu','mirage_live_menu_v42',
                         'mirage_live_menu_v43','mirage_live_menu_v44','mirage_live_menu_v45',
                         'mirage_live_menu_v46','mirage_live_menu_v47','mirage_live_menu_v48',
-                        'mirage_live_menu_v49','mirage_live_menu_v50','mirage_live_menu_v51'}) do
+                        'mirage_live_menu_v49','mirage_live_menu_v50','mirage_live_menu_v51',
+                        'mirage_live_menu_v52','mirage_live_menu_v53','mirage_live_menu_v54',
+                        'mirage_live_menu_v55','mirage_live_menu_v56'}) do
                         if type(Lapsus.SendNuiMessage)=='function' and type(json)=='table' then
                             local payload=json.encode({channel='mirage-ui-v3',action='carColor',value={active=false}})
                             pcall(Lapsus.SendNuiMessage,oldId,payload)
                         end
                         local destroyed,result=pcall(Lapsus.DestroyNui,oldId)
-                        
+                        if type(Lapsus.ExecuteNuiScript)=='function' then
+                            pcall(Lapsus.ExecuteNuiScript,oldId,
+                                "var n=document.getElementById('connectionStatus');if(n){n.hidden=true;n.style.setProperty('display','none','important')}var f=document.getElementById('bannerFrame');if(f){try{f.contentWindow.postMessage('mirage:pause','*')}catch(e){}f.removeAttribute('src');f.hidden=true}var v=document.getElementById('bannerVideo');if(v){v.pause();v.removeAttribute('src')}")
+                        end
                     end
                 else
                     
                 end
             end
-            local ok,accepted=pcall(Lapsus.CreateNui,'mirage_live_menu_v51',base..'/index-v51.html?transport=direct')
+            local ok,accepted=pcall(Lapsus.CreateNui,'mirage_live_menu_v56',base..'/index-v56.html?transport=direct')
             opened=ok and accepted==true
         end
         if opened and type(json)=='table' and type(json.encode)=='function' then
@@ -30065,6 +30169,7 @@ Citizen.CreateThread(function()
                     if loading.active then S.startupLoadingSent = true end
                 end
             end
+            send('license',Menu.Helpers.BuildNuiLicense())
             local color=S.carColor or {h=0,s=1,v=1,r=255,g=0,b=0}
             local screenW,screenH=GetActiveScreenResolution()
             send('carColor',{active=S.carColorPickerActive==true,theme=themeForNui(),
