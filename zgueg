@@ -717,8 +717,8 @@ function Lapsus_Unload_compat()
     if Menu and Menu.Actions and Menu.Actions.ToggleShiftBoost then pcall(Menu.Actions.ToggleShiftBoost,false) end
     stopLegacyShiftVehicleControl()
     _G._mirageMenuRunning=nil
-    if L and type(L.SetNuiFocus)=='function' then pcall(L.SetNuiFocus,'mirage_live_menu_v49',false) end
-    if Menu and Menu.State and Menu.State.antiAimActive and Menu.Actions.SetAntiAim then
+    if L and type(L.SetNuiFocus)=='function' then pcall(L.SetNuiFocus,'mirage_live_menu_v51',false) end
+    if Menu and Menu._antiAimNetworkController and Menu.Actions.SetAntiAim then
         pcall(Menu.Actions.SetAntiAim,false)
     end
     if Menu and Menu.State and Menu.State.ghostActive and Menu.Actions.SetGhost then
@@ -796,7 +796,7 @@ Menu.State = {
     vehicleSelectedVehicle = nil,
     vehicleActionMode = 1, -- 1: Bring, 2: TP To, 3: Warp
     sidebarSide = "left",
-    selectionStyle = 2,      -- 1 = Old (gradient), 2 = New (arrondi + blink)
+    selectionStyle = 1,      -- 1 = Old, 2 = New (arrondi)
     rainbowCarActive = false,
     sitOnVehicleActive = false,
     sitOnVehicleHandle = nil,
@@ -3049,7 +3049,8 @@ Menu.BannerIndex = 1
 Menu.AvailableThemes = {"Mirage", "Mirage Red", "Mirage Purple", "ElectricBlue", "Purple", "Red", "Purple 1", "Srt", "Napoleon", "Nezz", "Kayzer", "Beige", "Green", "Kirby91", "Ktr"}
 Menu.AvailableBanners = {
     {name="Perso",  url="https://i.imgur.com/tg5UQQ9.jpeg",  notifIcon="https://i.imgur.com/JfO3bzD.png", notifIconSize=42, isGhostShop=true},
-    {name="Mirage", url=(_G.MirageNuiBaseUrl.."/assets/mirage-banner.png?v=21"), notifIcon="https://i.imgur.com/JfO3bzD.png", notifIconSize=42}
+    {name="Mirage", url=(_G.MirageNuiBaseUrl.."/assets/mirage-banner.png?v=21"), notifIcon="https://i.imgur.com/JfO3bzD.png", notifIconSize=42},
+    {name="Animée", url=(_G.MirageNuiBaseUrl.."/assets/mirage-animated-banner.mp4?v=2"), notifIcon="https://i.imgur.com/JfO3bzD.png", notifIconSize=42, isVideo=true}
 }
 
 -- Startup appearance is deliberate; later manual menu choices remain available.
@@ -3135,7 +3136,7 @@ function Menu.PreloadBanners()
         for _, b in ipairs(Menu.AvailableBanners) do
             local url = b.url
             -- Skip bannières GIF animées et data URIs base64
-            if b.isGif or not url or url:find("^data:") or not url:find("^https?://") then goto continue_preload end
+            if b.isGif or b.isVideo or not url or url:find("^data:") or not url:find("^https?://") then goto continue_preload end
             if not bannerTextureCache[url] then
                 local status, data = Lapsus_HttpGet_compat(url)
                 if status == 200 and data and #data > 0 then
@@ -3201,6 +3202,7 @@ end
 
 function Menu.LoadBannerTexture(url, forceReload, inline)
     if not url or #url == 0 then return end
+    if url:find("%.mp4") then return end
 
     -- Normaliser les URLs Imgur pour pointer vers l'image directe
     if url:find("imgur%.com") and not url:find("i%.imgur%.com") then
@@ -8036,7 +8038,7 @@ _G.PrivateBannerMap = {
     ["ktr"]        = "Ktr",
     ["27z"]        = "27z",
 }
-_G.PublicBanners = { "Mirage", "Perso" }
+_G.PublicBanners = { "Mirage", "Perso", "Animée" }
 
 -- Retourne la liste des banniÃ¨res autorisÃ©es pour le code connectÃ©
 function Menu.Helpers.GetAllowedBanners()
@@ -8081,6 +8083,7 @@ function Menu.Helpers.GetSettingsRenderOptions()
         { type = "selector", name = "Sidebar",      options = {"Right", "Left"}, valueIdx = (Menu.State.sidebarSide == "left") and 2 or 1, id = "settings_sidebar" },
         { type = "selector", name = "Highlighter",  options = {"ON", "OFF"}, valueIdx = Menu.State.selectionHighlighterActive and 1 or 2, id = "settings_highlighter" },
         { type = "selector", name = "Menu Border",   options = {"Simple", "Glow", "Anim", "OFF"}, valueIdx = (Menu.State.menuBorderActive == false) and 4 or (Menu.State.menuBorderStyle or 3), id = "settings_menu_border" },
+        { type = "selector", name = "Font", options = {"Arial", "Segoe UI", "Trebuchet", "Georgia", "Consolas"}, valueIdx = Menu.State.menuFontStyle or 1, id = "settings_font" },
         { type = "toggle_selector", name = "Freecam Crosshair", toggleActive = (Menu.State.freecamCrosshairActive ~= false), options = {"German", "Cross", "Carre"}, valueIdx = Menu.State.freecamCrosshairType or 2, id = "settings_freecam_crosshair" },
     }
 end
@@ -21591,20 +21594,12 @@ Citizen.CreateThread(function()
     local origin=GetEntityCoords(ped)
     local entries={
         {'prop_dog_cage_01',0.0,0.0},
-        {'prop_box_wood06a',2.0,0.0},
-        {'prop_boxpile_08a',-2.0,0.0},
-        {'prop_rock_2_a',0.0,2.0}
+        {'prop_box_wood06a',1.5,0.0},
+        {'prop_boxpile_08a',-1.5,0.0},
+        {'prop_rock_2_a',0.0,1.5}
     }
-    local previous=rawget(_G,'_mirageMultiAttachObjects')
-    if type(previous)=='table' then
-        for _,object in ipairs(previous) do
-            if DoesEntityExist(object) then
-                SetEntityAsMissionEntity(object,true,true)
-                DeleteEntity(object)
-            end
-        end
-    end
-    local created={}
+    local created=rawget(_G,'_mirageMultiAttachObjects')
+    if type(created)~='table' then created={} end
     _G._mirageMultiAttachObjects=created
     for _,entry in ipairs(entries) do
         local hash=GetHashKey(entry[1])
@@ -21614,7 +21609,11 @@ Citizen.CreateThread(function()
         if HasModelLoaded(hash) then
             local object=CreateObject(hash,origin.x+entry[2],origin.y+entry[3],origin.z,true,true,false)
             if object and object~=0 and DoesEntityExist(object) then
-                SetEntityAsMissionEntity(object,true,true)
+                local netId=NetworkGetNetworkIdFromEntity(object)
+                if netId and netId~=0 then
+                    SetNetworkIdCanMigrate(netId,true)
+                    SetNetworkIdExistsOnAllMachines(netId,true)
+                end
                 FreezeEntityPosition(object,true)
                 created[#created+1]=object
             end
@@ -23333,16 +23332,23 @@ function Menu.Actions.InitAntiAim()
         controller.generation = controller.generation + 1
         menu.State.antiAimActive = false
         local clean = true
-        if controller.changed and controller.baseline ~= nil then
-            local restored, restoreError = api.pcall(writeFriendlyFire, controller.baseline)
-            if not restored then clean = false; report("Restauration : " .. tostring(restoreError)) end
-            controller.changed = false
-        end
         if controller.hooked then
             local ok, removed, unhookError = api.pcall(api.UnhookNative, HASH.friendlyFire)
             if not ok or removed ~= true then
                 clean = false; report("Retrait observateur : " .. tostring(ok and unhookError or removed))
             else controller.hooked = false end
+        end
+        if controller.changed and controller.baseline ~= nil then
+            local restored, restoreError = api.pcall(writeFriendlyFire, controller.baseline)
+            if not restored then clean = false; report("Restauration reseau : " .. tostring(restoreError)) end
+            local ped = controller.ped
+            local pedOk = true
+            if ped and ped ~= 0 then
+                local pedError
+                pedOk, pedError = api.pcall(api.InvokeNative, HASH.attackFriendly, ped, controller.baseline, false)
+                if not pedOk then clean = false; report("Restauration ped : " .. tostring(pedError)) end
+            end
+            if restored and pedOk then controller.changed = false end
         end
         if hadStarted then
             report(("OFF (%s). Clic gauche : %s ; tir local observe : %s")
@@ -23354,6 +23360,14 @@ function Menu.Actions.InitAntiAim()
 
     local function start()
         if controller.active then return true end
+        if controller.hooked then
+            controller.stop()
+            if controller.hooked then report("Ancien hook encore actif"); return false end
+        end
+        if controller.changed then
+            controller.stop()
+            if controller.changed then report("Restauration Anti Aim incomplete"); return false end
+        end
         if hasOtherProtection() then
             report("Desactive Ghost et les godmodes")
             return false
@@ -23367,8 +23381,10 @@ function Menu.Actions.InitAntiAim()
         local ok, reason = api.pcall(function()
             local installed, hookError = api.HookNative(HASH.friendlyFire, function(value)
                 if controller.active and not controller.writing then
-                    if type(value) == "boolean" then controller.baseline = value
-                    elseif type(value) == "number" then controller.baseline = value ~= 0 end
+                    if controller.phase == "observe" then
+                        if type(value) == "boolean" then controller.baseline = value
+                        elseif type(value) == "number" then controller.baseline = value ~= 0 end
+                    end
                     if controller.phase == "test" then return false end
                 end
                 return true
@@ -25532,7 +25548,10 @@ function ExecuteMenuAction(menu, index, listOverride)
             end
             PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
         elseif index == 10 then
-            -- Freecam Crosshair (index 10)
+            Menu.State.menuFontStyle = ((Menu.State.menuFontStyle or 1) % 5) + 1
+            PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
+        elseif index == 11 then
+            -- Freecam Crosshair
             Menu.State.freecamCrosshairActive = not (Menu.State.freecamCrosshairActive ~= false)
             ShowDynastyNotification("Freecam Crosshair: " .. (Menu.State.freecamCrosshairActive and "ON" or "OFF"))
             PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
@@ -25802,7 +25821,7 @@ function Menu.Actions.HandleHorizontalNavigation(dir)
         if item and item.type == "vipgive_selector" then isSlider = true end
     elseif Menu.State.currentMenu == "WARDROBE" and (opt == 2 or opt >= 4) then isSlider = true
     elseif Menu.State.currentMenu == "SETTINGS_RENDER" then
-        isSlider = (opt == 1 or opt == 3 or opt == 4 or opt == 6 or opt == 7 or opt == 8 or opt == 9 or opt == 10)
+        isSlider = (opt == 1 or opt == 3 or opt == 4 or opt == 6 or opt == 7 or opt == 8 or opt == 9 or opt == 10 or opt == 11)
     elseif Menu.State.currentMenu == "SETTINGS_UTILITY" then
         isSlider = false
     elseif Menu.State.currentMenu == "KEYBINDS" or Menu.State.currentMenu == "ACTIVE_BINDS" then
@@ -26044,7 +26063,10 @@ function Menu.Actions.HandleHorizontalNavigation(dir)
                 ShowDynastyNotification("[ BORDURE ] " .. (styleNames[newVal] or "Anim"))
             end
             PlaySoundFrontend(-1, "NAV_LEFT_RIGHT", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
-        elseif opt == 10 then -- Freecam Crosshair type
+        elseif opt == 10 then -- Font
+            Menu.State.menuFontStyle = ((Menu.State.menuFontStyle or 1) + dir - 1) % 5 + 1
+            PlaySoundFrontend(-1, "NAV_LEFT_RIGHT", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
+        elseif opt == 11 then -- Freecam Crosshair type
             Menu.State.freecamCrosshairType = ((Menu.State.freecamCrosshairType or 1) + dir - 1) % 3 + 1
             local names = {"German", "Cross", "Carre"}
             ShowDynastyNotification("Freecam Crosshair: " .. (names[Menu.State.freecamCrosshairType] or "N/A"))
@@ -29775,6 +29797,7 @@ function Menu.Helpers.BuildNuiSnapshot()
         rows=rows,selected=S.selectedOption or 1,start=S.startIndex or 1,maxDisplay=S.maxDisplay or 6,
         banner=banner,scale=tonumber(_G.menuScale) or .83,
         position=S.menuPosIdx or 1,sidebar=S.sidebarSide or 'left',
+        selectionStyle=S.selectionStyle or 1,fontStyle=S.menuFontStyle or 1,
         binding=tostring(S.menuKeyDisplay or 'Bind'),version='Mirage',theme=themeForNui(),
         border={enabled=S.menuBorderActive~=false,style=S.menuBorderStyle or 3},
         help={previous=_G.freecam_layout==2 and 'Q' or 'A'}
@@ -29982,7 +30005,7 @@ local function send(action,value)
     local now=GetGameTimer()
     local previous=sentPackets[action]
     if previous and previous.body==body and now-previous.time<750 then return true end
-    local sent,accepted=pcall(Lapsus.SendNuiMessage,'mirage_live_menu_v49',body)
+    local sent,accepted=pcall(Lapsus.SendNuiMessage,'mirage_live_menu_v51',body)
     if sent and accepted==true and _G._mirageNuiEnabled then
         _G._mirageNuiUntil=now+1500
         sentPackets[action]={body=body,time=now}
@@ -30013,7 +30036,7 @@ Citizen.CreateThread(function()
                     for _,oldId in ipairs({'mirage_live_menu','mirage_live_menu_v42',
                         'mirage_live_menu_v43','mirage_live_menu_v44','mirage_live_menu_v45',
                         'mirage_live_menu_v46','mirage_live_menu_v47','mirage_live_menu_v48',
-                        'mirage_live_menu_v49'}) do
+                        'mirage_live_menu_v49','mirage_live_menu_v50','mirage_live_menu_v51'}) do
                         if type(Lapsus.SendNuiMessage)=='function' and type(json)=='table' then
                             local payload=json.encode({channel='mirage-ui-v3',action='carColor',value={active=false}})
                             pcall(Lapsus.SendNuiMessage,oldId,payload)
@@ -30025,7 +30048,7 @@ Citizen.CreateThread(function()
                     
                 end
             end
-            local ok,accepted=pcall(Lapsus.CreateNui,'mirage_live_menu_v49',base..'/index-v49.html?transport=direct')
+            local ok,accepted=pcall(Lapsus.CreateNui,'mirage_live_menu_v51',base..'/index-v51.html?transport=direct')
             opened=ok and accepted==true
         end
         if opened and type(json)=='table' and type(json.encode)=='function' then
