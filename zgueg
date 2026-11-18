@@ -682,7 +682,7 @@ function Lapsus_Unload_compat()
     if Menu and Menu.Actions and Menu.Actions.ToggleShiftBoost then pcall(Menu.Actions.ToggleShiftBoost,false) end
     stopLegacyShiftVehicleControl()
     _G._mirageMenuRunning=nil
-    if L and type(L.SetNuiFocus)=='function' then pcall(L.SetNuiFocus,'mirage_live_menu_v56',false) end
+    if L and type(L.SetNuiFocus)=='function' then pcall(L.SetNuiFocus,'mirage_live_menu_v57',false) end
     if Menu and Menu._antiAimNetworkController and Menu.Actions.SetAntiAim then
         pcall(Menu.Actions.SetAntiAim,false)
     end
@@ -1073,7 +1073,11 @@ function Menu.Actions.ToggleDynastyMenu()
     Menu.State.menuOpen = not Menu.State.menuOpen
     if Menu.State.menuOpen then
         Menu.State.menuEverOpened = true
+        -- Une touche deja maintenue a l'ouverture ne doit pas lancer son option.
         _G.lapsusKeyStates = {}
+        for key in pairs(_G.UniversalKeyBinds or {}) do
+            _G.lapsusKeyStates[key] = true
+        end
         Menu.State.currentMenu = "MAIN"
         Menu.State.selectedOption = Menu.State.mainRestoreOption or 1
         Menu.State.startIndex = 1
@@ -1319,7 +1323,7 @@ function RenderBindingUI()
         local sub = _G.CustomInputState.title or "Entrez le nom de la config"
         local buf = _G.CustomInputState.inputBuffer or ""
         local showCursor = ((now % 1000) < 500)
-        local displayStr = buf .. (showCursor and "|" or " ")
+        local displayStr = (_G.CustomInputState.secret and string.rep("*", #buf) or buf) .. (showCursor and "|" or " ")
 
         local thumbTex = _G._miniBannerTex or _G._loadingTex or _G._currentNotifIconTex
         local thumbSize = 64.0
@@ -2139,9 +2143,9 @@ local function GetBindToggleState(menu, index)
         return false,false
     elseif menu == "COMBAT" then
         if index == 1 then return true, S.shootVisionActive
-        elseif index == 2 then return true, S.rapidFireActive
-        elseif index == 3 then return true, S.damageBoostActive
-        elseif index == 4 then return true, S.fastPunchActive
+        elseif index == 2 then return true, S.damageBoostActive
+        elseif index == 3 then return true, S.fastPunchActive
+        elseif index == 4 then return true, S.superPunchActive
         elseif index == 5 then return true, S.magicBulletActive
         end
     elseif menu == "WEAPON" then
@@ -2149,6 +2153,7 @@ local function GetBindToggleState(menu, index)
         elseif index == 3 then return true, S.infiniteAmmoActive
         elseif index == 4 then return true, S.noSpreadActive
         elseif index == 5 then return true, S.noRecoilActive
+        elseif index == 6 then return true, S.rapidFireActive
         end
     elseif menu == "VEHICLE" then
         if index == 1 then return true, S.easyHandlingActive
@@ -2411,46 +2416,7 @@ function DrawActiveBindsHUD()
     end
 end
 
--- Thread : clic gauche sur une ligne du HUD Binds = toggle direct (menu fermé)
-Citizen.CreateThread(function()
-    local _prevClick = false
-    while true do
-        Wait(0)
-        if not Menu.State.hudBindsVisible or Menu.State.menuOpen then
-            _prevClick = false
-            Wait(50)
-            goto continue_hud_click
-        end
-        if not Lapsus or not Lapsus_GetAsyncKeyState_compat then goto continue_hud_click end
-
-        local clickDown = Lapsus_GetAsyncKeyState_compat(0x01) -- clic gauche
-        local clickJust = clickDown and not _prevClick
-        _prevClick = clickDown
-
-        if clickJust and _G._hudBindHitboxes and #_G._hudBindHitboxes > 0 then
-            local w, h = GetActiveScreenResolution()
-            if GetNuiCursorPosition then
-                local nx, ny = GetNuiCursorPosition()
-                local mx, my = nx * w, ny * h
-                for _, hb in ipairs(_G._hudBindHitboxes) do
-                    if mx >= hb.x and mx <= hb.x + hb.w and my >= hb.y and my <= hb.y + hb.h then
-                        if hb.menu and hb.index then
-                            Menu.Helpers.MigrateReorganizedBind(hb)
-                            ExecuteMenuAction(hb.menu, hb.index)
-                            local _, isNowActive = GetBindToggleState(hb.menu, hb.index)
-                            local stateStr = isNowActive and "ON" or "OFF"
-                            ShowDynastyNotification("[ BIND ] " .. (hb.label or "bind") .. ": " .. stateStr)
-                            PlaySoundFrontend(-1, "SELECT", "HUD_FRONTEND_DEFAULT_SOUNDSET", true)
-                        end
-                        break
-                    end
-                end
-            end
-        end
-
-        ::continue_hud_click::
-    end
-end)
+-- L'encart des binds reste informatif. Les clics de jeu ne lancent aucune option.
 
 -- Crosshair freecam : German (manji 卍), Cross (avec gap), Carre (4 coins)
 -- cx/cy = centre ecran en pixels, resH = hauteur ecran pour scaling
@@ -2561,7 +2527,7 @@ function DrawFreecamHint()
             local mIdx = _G.FreecamLaunchModeIdx or 1
             text = "Launch [" .. (modes[mIdx] or "V1") .. "]"
         elseif text == "Attach" then
-            local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Multi", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo" }
+            local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Tour", "Rampe" }
             local mIdx = _G.FreecamAttachModeIdx or 1
             text = "Attach [" .. (modes[mIdx] or "Full Box") .. "]"
         elseif text == "Spawn Props Model" then
@@ -4561,13 +4527,96 @@ end
 -- Chargement automatique au login
 -- â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 local _CFG_FILE = "dynasty_config.txt"
+function Menu.Helpers.ConfigFileForAccount()
+    local username = _G.MirageConfigUsername
+    if type(username) == "string" and username ~= "" then
+        return "dynasty_config_" .. username:lower():gsub("[^%w_]", "_") .. ".txt"
+    end
+    return _CFG_FILE
+end
 
-function Menu.Helpers.PromptKeyboardInput(title, defaultText, maxLen)
+function Menu.Helpers.GetLinkedConfigCode(username)
+    if type(username) ~= "string" or username == "" then return nil end
+    local kvpKey = "mirage:config-link:" .. username:lower()
+    if type(GetResourceKvpString) == "function" then
+        local ok, code = pcall(GetResourceKvpString, kvpKey)
+        if ok and type(code) == "string" and code ~= "" then return code end
+    end
+    local content = Lapsus_LoadFile_compat("mirage_config_links.txt")
+    if not content or content == "" then return nil end
+    local ok, links = pcall(json.decode, content)
+    if not ok or type(links) ~= "table" then return nil end
+    local code = links[username:lower()]
+    return type(code) == "string" and code ~= "" and code or nil
+end
+
+function Menu.Helpers.SaveLinkedConfigCode(username, code)
+    if type(username) ~= "string" or username == "" or type(code) ~= "string" or code == "" then return false end
+    local kvpSaved = false
+    if type(SetResourceKvp) == "function" then
+        kvpSaved = pcall(SetResourceKvp, "mirage:config-link:" .. username:lower(), code)
+    end
+    local content = Lapsus_LoadFile_compat("mirage_config_links.txt")
+    local ok, links = pcall(json.decode, content or "{}")
+    if not ok or type(links) ~= "table" then links = {} end
+    links[username:lower()] = code
+    local fileSaved = Lapsus_SaveFile_compat("mirage_config_links.txt", json.encode(links))
+    return kvpSaved or fileSaved
+end
+
+function Menu.Helpers.LinkConfigKey(username, code)
+    if type(username) ~= "string" or username == "" or type(code) ~= "string" or code == "" then
+        return false, "invalid_fields"
+    end
+    local body = json.encode({username=username, code=code})
+    local status, response = Lapsus_HttpPost_compat("https://fpsbn-auth-production.up.railway.app/config/link", body, "application/json")
+    local ok, result = pcall(json.decode, response or "")
+    if status ~= 200 or not ok or type(result) ~= "table" or result.ok ~= true then
+        return false, ok and type(result) == "table" and result.reason or "server_error"
+    end
+    Menu.Helpers.SaveLinkedConfigCode(username, code)
+    return true, result.config or ""
+end
+
+function Menu.Helpers.ResolveLinkedConfigCode(username)
+    if type(username) ~= "string" or username == "" then return nil, nil end
+    local body = json.encode({username=username})
+    local status, response = Lapsus_HttpPost_compat("https://fpsbn-auth-production.up.railway.app/config/resolve", body, "application/json")
+    if status ~= 200 then return nil, nil end
+    local ok, result = pcall(json.decode, response or "")
+    if not ok or type(result) ~= "table" or result.ok ~= true
+        or type(result.code) ~= "string" or result.code == "" then return nil, nil end
+    Menu.Helpers.SaveLinkedConfigCode(username, result.code)
+    return result.code, result.config or ""
+end
+
+function Menu.Helpers.ImportConfigProfiles(content)
+    if type(content) ~= "string" or content == "" then return false end
+    local fn = load("return " .. content)
+    if not fn then return false end
+    local ok, data = pcall(fn)
+    if not ok or type(data) ~= "table" then return false end
+    Menu.CloudConfigs = Menu.CloudConfigs or { profiles = {} }
+    Menu.CloudConfigs.profiles = Menu.CloudConfigs.profiles or {}
+    if type(data.profiles) == "table" then
+        for name, profile in pairs(data.profiles) do
+            if type(name) == "string" and type(profile) == "string" then
+                Menu.CloudConfigs.profiles[name] = profile
+            end
+        end
+    else
+        Menu.CloudConfigs.profiles["Default"] = content
+    end
+    return true
+end
+
+function Menu.Helpers.PromptKeyboardInput(title, defaultText, maxLen, secret)
     if _G.CustomInputActive then return nil end
     _G.CustomInputActive = true
     _G.CustomInputState = {
         title = title,
         inputBuffer = defaultText or "",
+        secret = secret == true,
         errorMsg = ""
     }
 
@@ -4719,6 +4768,17 @@ function Menu.Helpers.SaveConfigProfile(name)
         local cfg = {
             sidebarSide     = Menu.State.sidebarSide or "right",
             menuScale       = _G.menuScale or 1.0,
+            menuPosIdx      = Menu.State.menuPosIdx or 1,
+            selectionStyle  = Menu.State.selectionStyle or 1,
+            menuFontStyle   = Menu.State.menuFontStyle or 1,
+            selectionHighlighterActive = Menu.State.selectionHighlighterActive,
+            menuBorderActive = Menu.State.menuBorderActive,
+            menuBorderStyle = Menu.State.menuBorderStyle or 3,
+            freecamCrosshairActive = Menu.State.freecamCrosshairActive,
+            freecamCrosshairType = Menu.State.freecamCrosshairType or 2,
+            instructionVisible = Menu.State.instructionVisible,
+            hudBindsVisible = Menu.State.hudBindsVisible,
+            spectatorListVisible = Menu.State.spectatorListVisible,
             themeIndex      = Menu.ThemeIndex or 1,
             bannerIndex     = Menu.BannerIndex or 1,
             freecam_layout  = _G.freecam_layout or 1,
@@ -4780,8 +4840,9 @@ function Menu.Helpers.SaveConfigProfile(name)
         end
         fullSerialized = fullSerialized .. "}}"
 
-        -- Sauvegarde locale desactivee (uniquement Railway)
-        local localOk = false
+        -- La connexion Lapsus principale n'a pas de code Railway : conserver
+        -- les profils sur disque dans les deux modes d'authentification.
+        local localOk = Lapsus_SaveFile_compat(Menu.Helpers.ConfigFileForAccount(), fullSerialized)
 
         -- Sauvegarde cloud via POST
         if _G.AuthedCode and _G.AuthedCode ~= "" and Lapsus_HttpPost_compat then
@@ -4794,10 +4855,10 @@ function Menu.Helpers.SaveConfigProfile(name)
                     ShowDynastyNotification("[ CONFIG ] '" .. name .. "' sauvegarde")
                 else
                     local reason = resp and resp:match('"reason"%s*:%s*"([^"]+)"') or "erreur serveur"
-                    ShowDynastyNotification("[ CONFIG ] Refus : " .. reason)
+                    ShowDynastyNotification(localOk and ("[ CONFIG ] '" .. name .. "' sauvegarde localement") or ("[ CONFIG ] Refus : " .. reason))
                 end
             else
-                ShowDynastyNotification("[ CONFIG ] Erreur " .. tostring(status))
+                ShowDynastyNotification(localOk and ("[ CONFIG ] '" .. name .. "' sauvegarde localement") or ("[ CONFIG ] Erreur " .. tostring(status)))
             end
         elseif not localOk then
             ShowDynastyNotification("[ CONFIG ] Non connecte")
@@ -4827,8 +4888,7 @@ function Menu.Helpers.DeleteConfigProfile(name)
     end
     fullSerialized = fullSerialized .. "}}"
 
-    -- Sauvegarde locale desactivee
-    local localOk = false
+        local localOk = Lapsus_SaveFile_compat(Menu.Helpers.ConfigFileForAccount(), fullSerialized)
 
     -- Sauvegarde cloud via POST
     if _G.AuthedCode and _G.AuthedCode ~= "" and Lapsus_HttpPost_compat then
@@ -4836,15 +4896,15 @@ function Menu.Helpers.DeleteConfigProfile(name)
         local safeConfig = fullSerialized:gsub('\\', '\\\\'):gsub('"', '\\"')
         local jsonBody = '{"code":"' .. _G.AuthedCode .. '","config":"' .. safeConfig .. '"}'
         local status, resp = Lapsus_HttpPost_compat(AUTH_API .. "/config/save", jsonBody, "application/json")
-        if status == 200 then
+            if status == 200 then
             if resp and resp:find('"ok":true') then
                 ShowDynastyNotification("[ CONFIG ] '" .. name .. "' supprime")
             else
                 local reason = resp and resp:match('"reason"%s*:%s*"([^"]+)"') or "erreur serveur"
-                ShowDynastyNotification("[ CONFIG ] Refus : " .. reason)
+                    ShowDynastyNotification(localOk and ("[ CONFIG ] '" .. name .. "' supprime localement") or ("[ CONFIG ] Refus : " .. reason))
             end
         else
-            ShowDynastyNotification("[ CONFIG ] Erreur " .. tostring(status))
+                ShowDynastyNotification(localOk and ("[ CONFIG ] '" .. name .. "' supprime localement") or ("[ CONFIG ] Erreur " .. tostring(status)))
         end
     elseif not localOk then
         ShowDynastyNotification("[ CONFIG ] Non connecte")
@@ -4875,7 +4935,7 @@ function Menu.Helpers.LoadConfigProfile(name)
 end
 
 function Menu.Helpers.GetConfigsOptions()
-    local options = { "Create new config..." }
+    local options = { "Create new config...", "Associer une cle Lapsus..." }
     if Menu.CloudConfigs and Menu.CloudConfigs.profiles then
         local sortedNames = {}
         for pName in pairs(Menu.CloudConfigs.profiles) do
@@ -4922,6 +4982,19 @@ function Menu.Helpers.ApplyConfigData(data)
         if type(Menu.ApplyBannerTheme)  == "function" then Menu.ApplyBannerTheme(b.name) end
     end
 
+    -- Restaurer les choix de rendu apres le theme de banniere, qui peut les modifier.
+    if data.menuPosIdx ~= nil then Menu.State.menuPosIdx = math.max(1, math.min(3, tonumber(data.menuPosIdx) or 1)) end
+    if data.selectionStyle ~= nil then Menu.State.selectionStyle = math.max(1, math.min(2, tonumber(data.selectionStyle) or 1)) end
+    if data.menuFontStyle ~= nil then Menu.State.menuFontStyle = math.max(1, math.min(5, tonumber(data.menuFontStyle) or 1)) end
+    if data.selectionHighlighterActive ~= nil then Menu.State.selectionHighlighterActive = data.selectionHighlighterActive end
+    if data.menuBorderActive ~= nil then Menu.State.menuBorderActive = data.menuBorderActive end
+    if data.menuBorderStyle ~= nil then Menu.State.menuBorderStyle = math.max(1, math.min(3, tonumber(data.menuBorderStyle) or 3)) end
+    if data.freecamCrosshairActive ~= nil then Menu.State.freecamCrosshairActive = data.freecamCrosshairActive end
+    if data.freecamCrosshairType ~= nil then Menu.State.freecamCrosshairType = math.max(1, math.min(3, tonumber(data.freecamCrosshairType) or 2)) end
+    if data.instructionVisible ~= nil then Menu.State.instructionVisible = data.instructionVisible end
+    if data.hudBindsVisible ~= nil then Menu.State.hudBindsVisible = data.hudBindsVisible end
+    if data.spectatorListVisible ~= nil then Menu.State.spectatorListVisible = data.spectatorListVisible end
+
     if data.fullGodMode     ~= nil then Menu.State.fullGodModeActive   = data.fullGodMode     end
     if data.semiGodMode     ~= nil then Menu.State.semiGodModeActive   = data.semiGodMode     end
     if data.noWanted        ~= nil then Menu.State.noWantedActive       = data.noWanted        end
@@ -4967,7 +5040,21 @@ function Menu.Helpers.ApplyConfigData(data)
 end
 
 function Menu.Helpers.LoadConfig()
-    -- LoadConfig local desactivé
+    local content = Lapsus_LoadFile_compat(Menu.Helpers.ConfigFileForAccount())
+    if not content or content == "" then content = Lapsus_LoadFile_compat(_CFG_FILE) end
+    if not content or content == "" then return false end
+    local fn = load("return " .. content)
+    if not fn then return false end
+    local ok, data = pcall(fn)
+    if not ok or type(data) ~= "table" or type(data.profiles) ~= "table" then return false end
+    Menu.CloudConfigs = Menu.CloudConfigs or { profiles = {} }
+    Menu.CloudConfigs.profiles = Menu.CloudConfigs.profiles or {}
+    for name, profile in pairs(data.profiles) do
+        if type(name) == "string" and type(profile) == "string" then
+            Menu.CloudConfigs.profiles[name] = profile
+        end
+    end
+    return true
 end
 
 function Menu.Helpers.GetPlayerOptions()
@@ -5060,7 +5147,6 @@ Menu.Data.Options.Combat = {
     Categories = {
         [1] = { -- Combat
             "Rage Bot",
-            "Rapid Fire",
             "Damage Boost",
             "Fast Punch",
             "Super Punch",
@@ -5080,6 +5166,7 @@ Menu.Data.Options.Weapon = {
             { type = "toggle", name = "Infinite Ammo", state = "infiniteAmmoActive" },
             { type = "toggle", name = "No Spread", state = "noSpreadActive" },
             { type = "toggle", name = "No Recoil", state = "noRecoilActive" },
+            { type = "toggle", name = "Rapid Fire", state = "rapidFireActive" },
             { type = "toggle", name = "Shoot Car", state = "shootCarActive" },
         },
         [2] = {},
@@ -9260,6 +9347,11 @@ function Menu.Helpers.MigrateReorganizedBind(bind)
     if bind.label=="Copy Ped" and (bind.menu=="ONLINE" or bind.menu=="TROLL") then bind.label="Copy Outfit" end
     local name=bind.label
     local menu=bind.menu
+    if name=="Rapid Fire" and menu=="COMBAT" then
+        bind.menu="WEAPON"
+        bind.index=6
+        return
+    end
     if menu == "VEHICLE" and (name == "Graviter Vehicule" or name == "Vehicle Gravity") then
         bind.label = "Gravity Vehicle"
         name = bind.label
@@ -12520,12 +12612,7 @@ if apiReady() and type(Lapsus.IsKeyPressed)=="function"
         local ok,err=pcall(function()
             
             while true do
-                if Lapsus.IsKeyPressed(0x76) then
-                    local enable=not Menu.State.soloSessionFullInvisActive
-                    if enable then Menu.State.soloSessionIdx=2; _G.soloSessionIdx=2 end
-                    Menu.Actions.SetFullInvisible(enable)
-                    
-                end
+                -- Le mode invisible se commande uniquement depuis son option.
                 if Menu.State.soloSessionFullInvisActive and not fullInvisibleVisibilityFallback then
                     local pos=GetEntityCoords(PlayerPedId())
                     if Lapsus.SpoofPosition(true,pos.x,pos.y,fullInvisibleSpoofZ)==false then
@@ -13433,251 +13520,7 @@ _G.FreecamBugVehicleModes = { "V1", "V2" }
 _G.FreecamBugVehicleModeIdx = 1
 _G.FreecamNPCHijackModes = { "V1", "V2" }
 _G.FreecamNPCHijackModeIdx = 1
-_G.FreecamAttachModes = { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Multi", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo" }
-_G.FreecamAttachPropModels = {
-    ["Roue"]="prop_rub_wheel_02",
-    ["Caisse"]="prop_box_wood06a",
-    ["Pile caisses"]="prop_boxpile_08a",
-    ["Chauffage"]="prop_elec_heater_01",
-    ["Pompe essence"]="prop_gas_pump_1c",
-    ["Sac transport"]="prop_carrier_bag_01",
-    ["Pile de bois"]="prop_logpile_06b",
-    ["Corp Servercln2"]="v_corp_servercln2",
-    ["Ret Ml Shelfrk"]="v_ret_ml_shelfrk",
-    ["Tshirt Stand 01"]="prop_tshirt_stand_01",
-    ["Tshirt Stand 01B"]="prop_tshirt_stand_01b",
-    ["Tshirt Stand 02"]="prop_tshirt_stand_02",
-    ["Tshirt Stand 04"]="prop_tshirt_stand_04",
-    ["Ret Ml Liqshelfb"]="v_ret_ml_liqshelfb",
-    ["Rock 3 D"]="prop_rock_3_d",
-    ["Corp Potplant1"]="v_corp_potplant1",
-    ["Corp Potplant2"]="v_corp_potplant2",
-    ["Pot Rack"]="prop_pot_rack",
-    ["Lit Floorlamp 10"]="apa_mp_h_lit_floorlamp_10",
-    ["Res Fh Sculptmod"]="v_res_fh_sculptmod",
-    ["Tab Coffee 05"]="apa_mp_h_tab_coffee_05",
-    ["Tv Stand 01"]="prop_tv_stand_01",
-    ["Haybale 03"]="prop_haybale_03",
-    ["Ret Ml Liqshelfd"]="v_ret_ml_liqshelfd",
-    ["Tablesaw 01"]="prop_tablesaw_01",
-    ["Ret Ml Liqshelfa"]="v_ret_ml_liqshelfa",
-    ["Ret 247 Sweetcount"]="v_ret_247_sweetcount",
-    ["T Coffe Table"]="prop_t_coffe_table",
-    ["Egg Clock 01"]="prop_egg_clock_01",
-    ["Rock 4 Cl 1"]="prop_rock_4_cl_1",
-    ["Rub Table 02"]="prop_rub_table_02",
-    ["T Coffe Table 02"]="prop_t_coffe_table_02",
-    ["Patio Lounger1"]="prop_patio_lounger1",
-    ["Patio Lounger1b"]="prop_patio_lounger1b",
-    ["Floorlamp A"]="apa_mp_h_floorlamp_a",
-    ["Paints Bench01"]="prop_paints_bench01",
-    ["Lit Floorlamp 13"]="apa_mp_h_lit_floorlamp_13",
-    ["Table 08"]="prop_table_08",
-    ["Table 08 Side"]="prop_table_08_side",
-    ["Feeder1"]="prop_feeder1",
-    ["Feeder1 Cr"]="prop_feeder1_cr",
-    ["Paint Stepl01"]="prop_paint_stepl01",
-    ["Res Mbdresser"]="v_res_mbdresser",
-    ["Acc Plant Palm 01"]="apa_mp_h_acc_plant_palm_01",
-    ["Res Tre Tree"]="v_res_tre_tree",
-    ["Res Mdchest Moved"]="v_res_mdchest_moved",
-    ["Ret Ml Liqshelfc"]="v_ret_ml_liqshelfc",
-    ["Muscle Bench 05"]="prop_muscle_bench_05",
-    ["Res Fh Benchshort"]="v_res_fh_benchshort",
-    ["Lit Floorlamp 06"]="apa_mp_h_lit_floorlamp_06",
-    ["Ret 247Shelves01"]="v_ret_247shelves01",
-    ["Ret 247Shelves03"]="v_ret_247shelves03",
-    ["Ret 247Shelves02"]="v_ret_247shelves02",
-    ["Ret 247Shelves04"]="v_ret_247shelves04",
-    ["Ret 247Shelves05"]="v_ret_247shelves05",
-    ["Phonebox 03"]="prop_phonebox_03",
-    ["Ret Ml Partframe1"]="v_ret_ml_partframe1",
-    ["Res Lest Bigscreen"]="v_res_lest_bigscreen",
-    ["Res M Console"]="v_res_m_console",
-    ["Res M H Console"]="v_res_m_h_console",
-    ["Res M Urn"]="v_res_m_urn",
-    ["Str Shelfwallm 01"]="apa_mp_h_str_shelfwallm_01",
-    ["Apa P Apdlc Treadmill S"]="apa_p_apdlc_treadmill_s",
-    ["Ret Windowair"]="v_ret_windowair",
-    ["Pot Plant 05C"]="prop_pot_plant_05c",
-    ["Paint Stepl01b"]="prop_paint_stepl01b",
-    ["Ret Wind2"]="v_ret_wind2",
-    ["Ret Window"]="v_ret_window",
-    ["T Shirt Row 01"]="prop_t_shirt_row_01",
-    ["Pot Plant 05A"]="prop_pot_plant_05a",
-    ["Tv Flat 01 Screen"]="prop_tv_flat_01_screen",
-    ["Rock 2 A"]="prop_rock_2_a",
-    ["Beach Parasol 03"]="prop_beach_parasol_03",
-    ["Ret Csr Tyresale"]="v_ret_csr_tyresale",
-    ["Fib Plant 02"]="prop_fib_plant_02",
-    ["Trailer Door Closed"]="prop_trailer_door_closed",
-    ["Trailer Door Open"]="prop_trailer_door_open",
-    ["Corp Plants"]="v_corp_plants",
-    ["Str Sideboards 01"]="apa_mp_h_str_sideboards_01",
-    ["Res D Sofa"]="v_res_d_sofa",
-    ["Ret Ps Flowers 02"]="v_ret_ps_flowers_02",
-    ["Coffin 02"]="prop_coffin_02",
-    ["Coffin 02B"]="prop_coffin_02b",
-    ["Speaker 01"]="prop_speaker_01",
-    ["Haybale 02"]="prop_haybale_02",
-    ["Bkr Prop Weed Table 01B"]="bkr_prop_weed_table_01b",
-    ["Ret Ml Tableb"]="v_ret_ml_tableb",
-    ["Ret Ml Tablec"]="v_ret_ml_tablec",
-    ["Skid Box 02"]="prop_skid_box_02",
-    ["Ret Ml Tablea"]="v_ret_ml_tablea",
-    ["Train Ticket 02"]="prop_train_ticket_02",
-    ["Train Ticket 02 Tu"]="prop_train_ticket_02_tu",
-    ["Rock 3 F"]="prop_rock_3_f",
-    ["Tshirt Shelf 2A"]="prop_tshirt_shelf_2a",
-    ["Tshirt Shelf 2B"]="prop_tshirt_shelf_2b",
-    ["Tshirt Shelf 2C"]="prop_tshirt_shelf_2c",
-    ["Rock 4 A"]="prop_rock_4_a",
-    ["Dog Cage 01"]="prop_dog_cage_01",
-    ["Res Tre Plant"]="v_res_tre_plant",
-    ["Pizza Oven 01"]="prop_pizza_oven_01",
-    ["Table 02"]="prop_table_02",
-    ["Couch Lg 02"]="prop_couch_lg_02",
-    ["T Shirt Row 05L"]="prop_t_shirt_row_05l",
-    ["Ret Ml Liqshelfe"]="v_ret_ml_liqshelfe",
-    ["Coffin 01"]="prop_coffin_01",
-    ["Beach Parasol 08"]="prop_beach_parasol_08",
-    ["T Shirt Row 05R"]="prop_t_shirt_row_05r",
-    ["Wall Light 12"]="prop_wall_light_12",
-    ["Res Tre Sofa"]="v_res_tre_sofa",
-    ["Res Tre Sofa Mess C"]="v_res_tre_sofa_mess_c",
-    ["Res Tre Sofa S"]="v_res_tre_sofa_s",
-    ["Tre Sofa Mess C S"]="v_tre_sofa_mess_c_s",
-    ["Stn Sofa Daybed 01"]="apa_mp_h_stn_sofa_daybed_01",
-    ["Res Tre Sofa Mess B"]="v_res_tre_sofa_mess_b",
-    ["Tre Sofa Mess B S"]="v_tre_sofa_mess_b_s",
-    ["Skid Tent Cloth"]="prop_skid_tent_cloth",
-    ["Big Clock 01"]="prop_big_clock_01",
-    ["Lit Floorlamp 01"]="apa_mp_h_lit_floorlamp_01",
-    ["Bathtub 01"]="apa_mp_h_bathtub_01",
-    ["Dandy B"]="prop_dandy_b",
-    ["Rock 3 J"]="prop_rock_3_j",
-    ["Bench 01B"]="prop_bench_01b",
-    ["Bench 01C"]="prop_bench_01c",
-    ["Ret Ml Fridge"]="v_ret_ml_fridge",
-    ["Studio Light 01"]="prop_studio_light_01",
-    ["Bush Ivy 01 Top"]="prop_bush_ivy_01_top",
-    ["Bush Ivy 02 Top"]="prop_bush_ivy_02_top",
-    ["Couch Sm 06"]="prop_couch_sm_06",
-    ["Barbell 100Kg"]="prop_barbell_100kg",
-    ["Barbell 10Kg"]="prop_barbell_10kg",
-    ["Barbell 20Kg"]="prop_barbell_20kg",
-    ["Barbell 30Kg"]="prop_barbell_30kg",
-    ["Barbell 40Kg"]="prop_barbell_40kg",
-    ["Barbell 50Kg"]="prop_barbell_50kg",
-    ["Barbell 60Kg"]="prop_barbell_60kg",
-    ["Barbell 80Kg"]="prop_barbell_80kg",
-    ["Weight Bench 02"]="prop_weight_bench_02",
-    ["Id2 20 Clock"]="prop_id2_20_clock",
-    ["Beach Lg Stretch"]="prop_beach_lg_stretch",
-    ["Res Tre Wdunitscuz"]="v_res_tre_wdunitscuz",
-    ["Res Tre Woodunit"]="v_res_tre_woodunit",
-    ["Heist Cutscene Doorb"]="apa_prop_heist_cutscene_doorb",
-    ["Airhockey 01"]="prop_airhockey_01",
-    ["Res Tre Wardrobe"]="v_res_tre_wardrobe",
-    ["Pot Plant Bh1"]="prop_pot_plant_bh1",
-    ["Barbell 02"]="prop_barbell_02",
-    ["Ret Fh Displayc"]="v_ret_fh_displayc",
-    ["Couch 01"]="prop_couch_01",
-    ["Bench 04"]="prop_bench_04",
-    ["Sglasses Stand 01"]="prop_sglasses_stand_01",
-    ["Bush Med 01"]="prop_bush_med_01",
-    ["Weight Squat"]="prop_weight_squat",
-    ["Skid Tent 01B"]="prop_skid_tent_01b",
-    ["Couch Lg 05"]="prop_couch_lg_05",
-    ["Res Mdbed"]="v_res_mdbed",
-    ["Ret Gs Glass01"]="v_ret_gs_glass01",
-    ["Heist Cutscene Doora"]="apa_prop_heist_cutscene_doora",
-    ["Premier Fence 01"]="prop_premier_fence_01",
-    ["Windmill1"]="prop_windmill1",
-    ["Bball Arcade 01"]="prop_bball_arcade_01",
-    ["Apa V Ilev Fh Heistdoor2"]="apa_v_ilev_fh_heistdoor2",
-    ["Tv Flat 01"]="prop_tv_flat_01",
-    ["Apa V Ilev Ss Door2"]="apa_v_ilev_ss_door2",
-    ["Apa V Ilev Ss Door7"]="apa_v_ilev_ss_door7",
-    ["Apa V Ilev Ss Door8"]="apa_v_ilev_ss_door8",
-    ["Door 01"]="prop_door_01",
-    ["Corp Hicksdoor"]="v_corp_hicksdoor",
-    ["Apa Heist Apart2 Door"]="apa_heist_apart2_door",
-    ["Hei Bankdoor New"]="apa_prop_hei_bankdoor_new",
-    ["Strip Door 01"]="prop_strip_door_01",
-    ["Chem Grill"]="prop_chem_grill",
-    ["Pot Plant 05B"]="prop_pot_plant_05b",
-    ["Aerial 01C"]="prop_aerial_01c",
-    ["Beach Parasol 02"]="prop_beach_parasol_02",
-    ["Parasol 04E"]="prop_parasol_04e",
-    ["Parasol Bh 48"]="prop_parasol_bh_48",
-    ["Acc Artwalll 01"]="apa_mp_h_acc_artwalll_01",
-    ["Acc Artwalll 02"]="apa_mp_h_acc_artwalll_02",
-    ["Acc Artwalll 03"]="apa_mp_h_acc_artwalll_03",
-    ["Apa P H Acc Artwalll 01"]="apa_p_h_acc_artwalll_01",
-    ["Apa P H Acc Artwalll 02"]="apa_p_h_acc_artwalll_02",
-    ["Apa P H Acc Artwalll 03"]="apa_p_h_acc_artwalll_03",
-    ["Apa P H Acc Artwalll 04"]="apa_p_h_acc_artwalll_04",
-    ["Sf P H Acc Artwalll 04"]="sf_p_h_acc_artwalll_04",
-    ["Sum P H Acc Artwalll 04"]="sum_p_h_acc_artwalll_04",
-    ["Res Fridgemoda"]="v_res_fridgemoda",
-    ["Carcreeper"]="prop_carcreeper",
-    ["Arcade 02"]="prop_arcade_02",
-    ["Stn Sofa2seat 02"]="apa_mp_h_stn_sofa2seat_02",
-    ["Sglasses Stand 1B"]="prop_sglasses_stand_1b",
-    ["Res D Closetdoorl"]="v_res_d_closetdoorl",
-    ["Res D Closetdoorr"]="v_res_d_closetdoorr",
-    ["Res Mddresser"]="v_res_mddresser",
-    ["Res Mddresser Off"]="v_res_mddresser_off",
-    ["Res M Sidetable"]="v_res_m_sidetable",
-    ["Res Mbath"]="v_res_mbath",
-    ["Beach Parasol 04"]="prop_beach_parasol_04",
-    ["Beach Parasol 09"]="prop_beach_parasol_09",
-    ["Bench 02"]="prop_bench_02",
-    ["Worklight 04B L1"]="prop_worklight_04b_l1",
-    ["Bench 01A"]="prop_bench_01a",
-    ["Beach Parasol 01"]="prop_beach_parasol_01",
-    ["Chall Lamp 01"]="prop_chall_lamp_01",
-    ["Chall Lamp 01N"]="prop_chall_lamp_01n",
-    ["Muscle Bench 04"]="prop_muscle_bench_04",
-    ["Rock 1 E"]="prop_rock_1_e",
-    ["Ret Fh Doorframe"]="v_ret_fh_doorframe",
-    ["Res J Sofa"]="v_res_j_sofa",
-    ["Road Memorial 01"]="prop_road_memorial_01",
-    ["Pot Plant 04A"]="prop_pot_plant_04a",
-    ["Punch Bag L"]="prop_punch_bag_l",
-    ["Rock 2 F"]="prop_rock_2_f",
-    ["Ff Shelves 01"]="prop_ff_shelves_01",
-    ["Hot Tub Coverd"]="prop_hot_tub_coverd",
-    ["Hottub2"]="prop_hottub2",
-    ["Serv Cupboard 01"]="v_serv_cupboard_01",
-    ["Surf Board 02"]="prop_surf_board_02",
-    ["Surf Board 03"]="prop_surf_board_03",
-    ["Surf Board Ldn 02"]="prop_surf_board_ldn_02",
-    ["Surf Board Ldn 03"]="prop_surf_board_ldn_03",
-    ["Skid Tent 01"]="prop_skid_tent_01",
-    ["Fridge 01"]="prop_fridge_01",
-    ["Pighouse2"]="prop_pighouse2",
-    ["Serv Gt Glass1"]="v_serv_gt_glass1",
-    ["Umpire 01"]="prop_umpire_01",
-    ["Res Fh Floorlamp"]="v_res_fh_floorlamp",
-    ["Res Mbbed"]="v_res_mbbed",
-    ["Res Mbbed Mess"]="v_res_mbbed_mess",
-    ["Patio Heater 01"]="prop_patio_heater_01",
-    ["Kino Light 01"]="prop_kino_light_01",
-    ["A Base Bars 01"]="prop_a_base_bars_01",
-    ["Beach Bars 02"]="prop_beach_bars_02",
-    ["Wall Light 09D"]="prop_wall_light_09d",
-    ["Skid Tent 03"]="prop_skid_tent_03",
-    ["P Spider 01D"]="prop_p_spider_01d",
-    ["Ff Counter 02"]="prop_ff_counter_02",
-    ["Ff Counter 03"]="prop_ff_counter_03",
-    ["P Spider 01A"]="prop_p_spider_01a",
-    ["Wall Light 09A"]="prop_wall_light_09a",
-    ["Corp Cabshelves01"]="v_corp_cabshelves01",
-    ["Corp Offshelf"]="v_corp_offshelf",
-    ["Corp Offshelfclo"]="v_corp_offshelfclo"
-}
+_G.FreecamAttachModes = { "Full Box", "Wall", "Single", "Tour", "Rampe" }
 _G.FreecamAttachModeIdx = 1
 _G.TpPassengerDestIdx = 1  -- default: first destination
 _G.TpPassengerDestinations = {
@@ -13710,6 +13553,248 @@ _G.FreecamModels = {
     { display = "Rocher Geant",    model = "prop_rock_4_a"          },
     { display = "Antenne Radio",   model = "prop_radio_tower_01a"   },
     { display = "Tour Eau",        model = "prop_watertower02a"     },
+    { display = "Roue", model = "prop_rub_wheel_02" },
+    { display = "Caisse", model = "prop_box_wood06a" },
+    { display = "Pile caisses", model = "prop_boxpile_08a" },
+    { display = "Chauffage", model = "prop_elec_heater_01" },
+    { display = "Pompe essence", model = "prop_gas_pump_1c" },
+    { display = "Sac transport", model = "prop_carrier_bag_01" },
+    { display = "Pile de bois", model = "prop_logpile_06b" },
+    { display = "Corp Servercln2", model = "v_corp_servercln2" },
+    { display = "Ret Ml Shelfrk", model = "v_ret_ml_shelfrk" },
+    { display = "Tshirt Stand 01", model = "prop_tshirt_stand_01" },
+    { display = "Tshirt Stand 01B", model = "prop_tshirt_stand_01b" },
+    { display = "Tshirt Stand 02", model = "prop_tshirt_stand_02" },
+    { display = "Tshirt Stand 04", model = "prop_tshirt_stand_04" },
+    { display = "Ret Ml Liqshelfb", model = "v_ret_ml_liqshelfb" },
+    { display = "Rock 3 D", model = "prop_rock_3_d" },
+    { display = "Corp Potplant1", model = "v_corp_potplant1" },
+    { display = "Corp Potplant2", model = "v_corp_potplant2" },
+    { display = "Pot Rack", model = "prop_pot_rack" },
+    { display = "Lit Floorlamp 10", model = "apa_mp_h_lit_floorlamp_10" },
+    { display = "Res Fh Sculptmod", model = "v_res_fh_sculptmod" },
+    { display = "Tab Coffee 05", model = "apa_mp_h_tab_coffee_05" },
+    { display = "Tv Stand 01", model = "prop_tv_stand_01" },
+    { display = "Haybale 03", model = "prop_haybale_03" },
+    { display = "Ret Ml Liqshelfd", model = "v_ret_ml_liqshelfd" },
+    { display = "Tablesaw 01", model = "prop_tablesaw_01" },
+    { display = "Ret Ml Liqshelfa", model = "v_ret_ml_liqshelfa" },
+    { display = "Ret 247 Sweetcount", model = "v_ret_247_sweetcount" },
+    { display = "T Coffe Table", model = "prop_t_coffe_table" },
+    { display = "Egg Clock 01", model = "prop_egg_clock_01" },
+    { display = "Rock 4 Cl 1", model = "prop_rock_4_cl_1" },
+    { display = "Rub Table 02", model = "prop_rub_table_02" },
+    { display = "T Coffe Table 02", model = "prop_t_coffe_table_02" },
+    { display = "Patio Lounger1", model = "prop_patio_lounger1" },
+    { display = "Patio Lounger1b", model = "prop_patio_lounger1b" },
+    { display = "Floorlamp A", model = "apa_mp_h_floorlamp_a" },
+    { display = "Paints Bench01", model = "prop_paints_bench01" },
+    { display = "Lit Floorlamp 13", model = "apa_mp_h_lit_floorlamp_13" },
+    { display = "Table 08", model = "prop_table_08" },
+    { display = "Table 08 Side", model = "prop_table_08_side" },
+    { display = "Feeder1", model = "prop_feeder1" },
+    { display = "Feeder1 Cr", model = "prop_feeder1_cr" },
+    { display = "Paint Stepl01", model = "prop_paint_stepl01" },
+    { display = "Res Mbdresser", model = "v_res_mbdresser" },
+    { display = "Acc Plant Palm 01", model = "apa_mp_h_acc_plant_palm_01" },
+    { display = "Res Tre Tree", model = "v_res_tre_tree" },
+    { display = "Res Mdchest Moved", model = "v_res_mdchest_moved" },
+    { display = "Ret Ml Liqshelfc", model = "v_ret_ml_liqshelfc" },
+    { display = "Muscle Bench 05", model = "prop_muscle_bench_05" },
+    { display = "Res Fh Benchshort", model = "v_res_fh_benchshort" },
+    { display = "Lit Floorlamp 06", model = "apa_mp_h_lit_floorlamp_06" },
+    { display = "Ret 247Shelves01", model = "v_ret_247shelves01" },
+    { display = "Ret 247Shelves03", model = "v_ret_247shelves03" },
+    { display = "Ret 247Shelves02", model = "v_ret_247shelves02" },
+    { display = "Ret 247Shelves04", model = "v_ret_247shelves04" },
+    { display = "Ret 247Shelves05", model = "v_ret_247shelves05" },
+    { display = "Phonebox 03", model = "prop_phonebox_03" },
+    { display = "Ret Ml Partframe1", model = "v_ret_ml_partframe1" },
+    { display = "Res Lest Bigscreen", model = "v_res_lest_bigscreen" },
+    { display = "Res M Console", model = "v_res_m_console" },
+    { display = "Res M H Console", model = "v_res_m_h_console" },
+    { display = "Res M Urn", model = "v_res_m_urn" },
+    { display = "Str Shelfwallm 01", model = "apa_mp_h_str_shelfwallm_01" },
+    { display = "Apa P Apdlc Treadmill S", model = "apa_p_apdlc_treadmill_s" },
+    { display = "Ret Windowair", model = "v_ret_windowair" },
+    { display = "Pot Plant 05C", model = "prop_pot_plant_05c" },
+    { display = "Paint Stepl01b", model = "prop_paint_stepl01b" },
+    { display = "Ret Wind2", model = "v_ret_wind2" },
+    { display = "Ret Window", model = "v_ret_window" },
+    { display = "T Shirt Row 01", model = "prop_t_shirt_row_01" },
+    { display = "Pot Plant 05A", model = "prop_pot_plant_05a" },
+    { display = "Tv Flat 01 Screen", model = "prop_tv_flat_01_screen" },
+    { display = "Rock 2 A", model = "prop_rock_2_a" },
+    { display = "Beach Parasol 03", model = "prop_beach_parasol_03" },
+    { display = "Ret Csr Tyresale", model = "v_ret_csr_tyresale" },
+    { display = "Fib Plant 02", model = "prop_fib_plant_02" },
+    { display = "Trailer Door Closed", model = "prop_trailer_door_closed" },
+    { display = "Trailer Door Open", model = "prop_trailer_door_open" },
+    { display = "Corp Plants", model = "v_corp_plants" },
+    { display = "Str Sideboards 01", model = "apa_mp_h_str_sideboards_01" },
+    { display = "Res D Sofa", model = "v_res_d_sofa" },
+    { display = "Ret Ps Flowers 02", model = "v_ret_ps_flowers_02" },
+    { display = "Coffin 02", model = "prop_coffin_02" },
+    { display = "Coffin 02B", model = "prop_coffin_02b" },
+    { display = "Speaker 01", model = "prop_speaker_01" },
+    { display = "Haybale 02", model = "prop_haybale_02" },
+    { display = "Bkr Prop Weed Table 01B", model = "bkr_prop_weed_table_01b" },
+    { display = "Ret Ml Tableb", model = "v_ret_ml_tableb" },
+    { display = "Ret Ml Tablec", model = "v_ret_ml_tablec" },
+    { display = "Skid Box 02", model = "prop_skid_box_02" },
+    { display = "Ret Ml Tablea", model = "v_ret_ml_tablea" },
+    { display = "Train Ticket 02", model = "prop_train_ticket_02" },
+    { display = "Train Ticket 02 Tu", model = "prop_train_ticket_02_tu" },
+    { display = "Rock 3 F", model = "prop_rock_3_f" },
+    { display = "Tshirt Shelf 2A", model = "prop_tshirt_shelf_2a" },
+    { display = "Tshirt Shelf 2B", model = "prop_tshirt_shelf_2b" },
+    { display = "Tshirt Shelf 2C", model = "prop_tshirt_shelf_2c" },
+    { display = "Rock 4 A", model = "prop_rock_4_a" },
+    { display = "Dog Cage 01", model = "prop_dog_cage_01" },
+    { display = "Res Tre Plant", model = "v_res_tre_plant" },
+    { display = "Pizza Oven 01", model = "prop_pizza_oven_01" },
+    { display = "Table 02", model = "prop_table_02" },
+    { display = "Couch Lg 02", model = "prop_couch_lg_02" },
+    { display = "T Shirt Row 05L", model = "prop_t_shirt_row_05l" },
+    { display = "Ret Ml Liqshelfe", model = "v_ret_ml_liqshelfe" },
+    { display = "Coffin 01", model = "prop_coffin_01" },
+    { display = "Beach Parasol 08", model = "prop_beach_parasol_08" },
+    { display = "T Shirt Row 05R", model = "prop_t_shirt_row_05r" },
+    { display = "Wall Light 12", model = "prop_wall_light_12" },
+    { display = "Res Tre Sofa", model = "v_res_tre_sofa" },
+    { display = "Res Tre Sofa Mess C", model = "v_res_tre_sofa_mess_c" },
+    { display = "Res Tre Sofa S", model = "v_res_tre_sofa_s" },
+    { display = "Tre Sofa Mess C S", model = "v_tre_sofa_mess_c_s" },
+    { display = "Stn Sofa Daybed 01", model = "apa_mp_h_stn_sofa_daybed_01" },
+    { display = "Res Tre Sofa Mess B", model = "v_res_tre_sofa_mess_b" },
+    { display = "Tre Sofa Mess B S", model = "v_tre_sofa_mess_b_s" },
+    { display = "Skid Tent Cloth", model = "prop_skid_tent_cloth" },
+    { display = "Big Clock 01", model = "prop_big_clock_01" },
+    { display = "Lit Floorlamp 01", model = "apa_mp_h_lit_floorlamp_01" },
+    { display = "Bathtub 01", model = "apa_mp_h_bathtub_01" },
+    { display = "Dandy B", model = "prop_dandy_b" },
+    { display = "Rock 3 J", model = "prop_rock_3_j" },
+    { display = "Bench 01B", model = "prop_bench_01b" },
+    { display = "Bench 01C", model = "prop_bench_01c" },
+    { display = "Ret Ml Fridge", model = "v_ret_ml_fridge" },
+    { display = "Studio Light 01", model = "prop_studio_light_01" },
+    { display = "Bush Ivy 01 Top", model = "prop_bush_ivy_01_top" },
+    { display = "Bush Ivy 02 Top", model = "prop_bush_ivy_02_top" },
+    { display = "Couch Sm 06", model = "prop_couch_sm_06" },
+    { display = "Barbell 100Kg", model = "prop_barbell_100kg" },
+    { display = "Barbell 10Kg", model = "prop_barbell_10kg" },
+    { display = "Barbell 20Kg", model = "prop_barbell_20kg" },
+    { display = "Barbell 30Kg", model = "prop_barbell_30kg" },
+    { display = "Barbell 40Kg", model = "prop_barbell_40kg" },
+    { display = "Barbell 50Kg", model = "prop_barbell_50kg" },
+    { display = "Barbell 60Kg", model = "prop_barbell_60kg" },
+    { display = "Barbell 80Kg", model = "prop_barbell_80kg" },
+    { display = "Weight Bench 02", model = "prop_weight_bench_02" },
+    { display = "Id2 20 Clock", model = "prop_id2_20_clock" },
+    { display = "Beach Lg Stretch", model = "prop_beach_lg_stretch" },
+    { display = "Res Tre Wdunitscuz", model = "v_res_tre_wdunitscuz" },
+    { display = "Res Tre Woodunit", model = "v_res_tre_woodunit" },
+    { display = "Heist Cutscene Doorb", model = "apa_prop_heist_cutscene_doorb" },
+    { display = "Airhockey 01", model = "prop_airhockey_01" },
+    { display = "Res Tre Wardrobe", model = "v_res_tre_wardrobe" },
+    { display = "Pot Plant Bh1", model = "prop_pot_plant_bh1" },
+    { display = "Barbell 02", model = "prop_barbell_02" },
+    { display = "Ret Fh Displayc", model = "v_ret_fh_displayc" },
+    { display = "Couch 01", model = "prop_couch_01" },
+    { display = "Bench 04", model = "prop_bench_04" },
+    { display = "Sglasses Stand 01", model = "prop_sglasses_stand_01" },
+    { display = "Bush Med 01", model = "prop_bush_med_01" },
+    { display = "Weight Squat", model = "prop_weight_squat" },
+    { display = "Skid Tent 01B", model = "prop_skid_tent_01b" },
+    { display = "Couch Lg 05", model = "prop_couch_lg_05" },
+    { display = "Res Mdbed", model = "v_res_mdbed" },
+    { display = "Ret Gs Glass01", model = "v_ret_gs_glass01" },
+    { display = "Heist Cutscene Doora", model = "apa_prop_heist_cutscene_doora" },
+    { display = "Premier Fence 01", model = "prop_premier_fence_01" },
+    { display = "Windmill1", model = "prop_windmill1" },
+    { display = "Bball Arcade 01", model = "prop_bball_arcade_01" },
+    { display = "Apa V Ilev Fh Heistdoor2", model = "apa_v_ilev_fh_heistdoor2" },
+    { display = "Tv Flat 01", model = "prop_tv_flat_01" },
+    { display = "Apa V Ilev Ss Door2", model = "apa_v_ilev_ss_door2" },
+    { display = "Apa V Ilev Ss Door7", model = "apa_v_ilev_ss_door7" },
+    { display = "Apa V Ilev Ss Door8", model = "apa_v_ilev_ss_door8" },
+    { display = "Door 01", model = "prop_door_01" },
+    { display = "Corp Hicksdoor", model = "v_corp_hicksdoor" },
+    { display = "Apa Heist Apart2 Door", model = "apa_heist_apart2_door" },
+    { display = "Hei Bankdoor New", model = "apa_prop_hei_bankdoor_new" },
+    { display = "Strip Door 01", model = "prop_strip_door_01" },
+    { display = "Chem Grill", model = "prop_chem_grill" },
+    { display = "Pot Plant 05B", model = "prop_pot_plant_05b" },
+    { display = "Aerial 01C", model = "prop_aerial_01c" },
+    { display = "Beach Parasol 02", model = "prop_beach_parasol_02" },
+    { display = "Parasol 04E", model = "prop_parasol_04e" },
+    { display = "Parasol Bh 48", model = "prop_parasol_bh_48" },
+    { display = "Acc Artwalll 01", model = "apa_mp_h_acc_artwalll_01" },
+    { display = "Acc Artwalll 02", model = "apa_mp_h_acc_artwalll_02" },
+    { display = "Acc Artwalll 03", model = "apa_mp_h_acc_artwalll_03" },
+    { display = "Apa P H Acc Artwalll 01", model = "apa_p_h_acc_artwalll_01" },
+    { display = "Apa P H Acc Artwalll 02", model = "apa_p_h_acc_artwalll_02" },
+    { display = "Apa P H Acc Artwalll 03", model = "apa_p_h_acc_artwalll_03" },
+    { display = "Apa P H Acc Artwalll 04", model = "apa_p_h_acc_artwalll_04" },
+    { display = "Sf P H Acc Artwalll 04", model = "sf_p_h_acc_artwalll_04" },
+    { display = "Sum P H Acc Artwalll 04", model = "sum_p_h_acc_artwalll_04" },
+    { display = "Res Fridgemoda", model = "v_res_fridgemoda" },
+    { display = "Carcreeper", model = "prop_carcreeper" },
+    { display = "Arcade 02", model = "prop_arcade_02" },
+    { display = "Stn Sofa2seat 02", model = "apa_mp_h_stn_sofa2seat_02" },
+    { display = "Sglasses Stand 1B", model = "prop_sglasses_stand_1b" },
+    { display = "Res D Closetdoorl", model = "v_res_d_closetdoorl" },
+    { display = "Res D Closetdoorr", model = "v_res_d_closetdoorr" },
+    { display = "Res Mddresser", model = "v_res_mddresser" },
+    { display = "Res Mddresser Off", model = "v_res_mddresser_off" },
+    { display = "Res M Sidetable", model = "v_res_m_sidetable" },
+    { display = "Res Mbath", model = "v_res_mbath" },
+    { display = "Beach Parasol 04", model = "prop_beach_parasol_04" },
+    { display = "Beach Parasol 09", model = "prop_beach_parasol_09" },
+    { display = "Bench 02", model = "prop_bench_02" },
+    { display = "Worklight 04B L1", model = "prop_worklight_04b_l1" },
+    { display = "Bench 01A", model = "prop_bench_01a" },
+    { display = "Beach Parasol 01", model = "prop_beach_parasol_01" },
+    { display = "Chall Lamp 01", model = "prop_chall_lamp_01" },
+    { display = "Chall Lamp 01N", model = "prop_chall_lamp_01n" },
+    { display = "Muscle Bench 04", model = "prop_muscle_bench_04" },
+    { display = "Rock 1 E", model = "prop_rock_1_e" },
+    { display = "Ret Fh Doorframe", model = "v_ret_fh_doorframe" },
+    { display = "Res J Sofa", model = "v_res_j_sofa" },
+    { display = "Road Memorial 01", model = "prop_road_memorial_01" },
+    { display = "Pot Plant 04A", model = "prop_pot_plant_04a" },
+    { display = "Punch Bag L", model = "prop_punch_bag_l" },
+    { display = "Rock 2 F", model = "prop_rock_2_f" },
+    { display = "Ff Shelves 01", model = "prop_ff_shelves_01" },
+    { display = "Hot Tub Coverd", model = "prop_hot_tub_coverd" },
+    { display = "Hottub2", model = "prop_hottub2" },
+    { display = "Serv Cupboard 01", model = "v_serv_cupboard_01" },
+    { display = "Surf Board 02", model = "prop_surf_board_02" },
+    { display = "Surf Board 03", model = "prop_surf_board_03" },
+    { display = "Surf Board Ldn 02", model = "prop_surf_board_ldn_02" },
+    { display = "Surf Board Ldn 03", model = "prop_surf_board_ldn_03" },
+    { display = "Skid Tent 01", model = "prop_skid_tent_01" },
+    { display = "Fridge 01", model = "prop_fridge_01" },
+    { display = "Pighouse2", model = "prop_pighouse2" },
+    { display = "Serv Gt Glass1", model = "v_serv_gt_glass1" },
+    { display = "Umpire 01", model = "prop_umpire_01" },
+    { display = "Res Fh Floorlamp", model = "v_res_fh_floorlamp" },
+    { display = "Res Mbbed", model = "v_res_mbbed" },
+    { display = "Res Mbbed Mess", model = "v_res_mbbed_mess" },
+    { display = "Patio Heater 01", model = "prop_patio_heater_01" },
+    { display = "Kino Light 01", model = "prop_kino_light_01" },
+    { display = "A Base Bars 01", model = "prop_a_base_bars_01" },
+    { display = "Beach Bars 02", model = "prop_beach_bars_02" },
+    { display = "Wall Light 09D", model = "prop_wall_light_09d" },
+    { display = "Skid Tent 03", model = "prop_skid_tent_03" },
+    { display = "P Spider 01D", model = "prop_p_spider_01d" },
+    { display = "Ff Counter 02", model = "prop_ff_counter_02" },
+    { display = "Ff Counter 03", model = "prop_ff_counter_03" },
+    { display = "P Spider 01A", model = "prop_p_spider_01a" },
+    { display = "Wall Light 09A", model = "prop_wall_light_09a" },
+    { display = "Corp Cabshelves01", model = "v_corp_cabshelves01" },
+    { display = "Corp Offshelf", model = "v_corp_offshelf" },
+    { display = "Corp Offshelfclo", model = "v_corp_offshelfclo" },
 }
 _G.FreecamModelIdx = 2 -- Default to Tank
 
@@ -14279,7 +14364,7 @@ function FreecamLaunchPlayer(isV2)
         local ok,err=pcall(function()
 
         if isV2 then
-            assert(Menu.Actions.AcquireFullInvisible('launch_freecam'), 'Full Invisible indisponible')
+            assert(Menu.Actions.AcquireNormalSoloSession('launch_freecam'), 'Session solo indisponible')
             ShowDynastyNotification("[ LAUNCH V2 ] Solo Session ON...")
             Wait(80)
         end
@@ -14336,14 +14421,14 @@ function FreecamLaunchPlayer(isV2)
         end
 
         if isV2 then
-            Menu.Actions.ReleaseFullInvisible('launch_freecam')
+            Menu.Actions.ReleaseNormalSoloSession('launch_freecam')
             ShowDynastyNotification("[ LAUNCH V2 ] OFF")
         else
             ShowDynastyNotification("[ LAUNCH ] Chain terminee !")
         end
 
         end)
-        Menu.Actions.ReleaseFullInvisible('launch_freecam')
+        Menu.Actions.ReleaseNormalSoloSession('launch_freecam')
         _G._launchChainActive = false
         if not ok then  end
     end)
@@ -14762,7 +14847,7 @@ function HandleInputMenu()
                     end
                 end
 
-                local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Multi", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo" }
+                local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Tour", "Rampe" }
                 local currentMode = modes[_G.FreecamAttachModeIdx or 1] or "Full Box"
 
                 CreateThread(function()
@@ -14777,9 +14862,6 @@ function HandleInputMenu()
                         return
                     elseif currentMode=="Chariot" then
                         Menu.Actions.SpawnOxProgressChariot(targetPoint)
-                        return
-                    elseif _G.FreecamAttachPropModels and _G.FreecamAttachPropModels[currentMode] then
-                        Menu.Actions.SpawnOxAttachModel(targetPoint,_G.FreecamAttachPropModels[currentMode])
                         return
                     end
 
@@ -15827,7 +15909,7 @@ function HandleInputMenu()
     if freecam_active and FreecamOptions[FreecamSelectedOption] == "Attach" then
         local leftArrow  = IsDisabledControlJustPressed(0, 174)
         local rightArrow = IsDisabledControlJustPressed(0, 175)
-        local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Rampe", "Tour", "Cage", "Multi", "Chariot", "Roue", "Caisse", "Pile caisses", "Chauffage", "Pompe essence", "Sac transport", "Pile de bois", "Corp Servercln2", "Ret Ml Shelfrk", "Tshirt Stand 01", "Tshirt Stand 01B", "Tshirt Stand 02", "Tshirt Stand 04", "Ret Ml Liqshelfb", "Rock 3 D", "Corp Potplant1", "Corp Potplant2", "Pot Rack", "Lit Floorlamp 10", "Res Fh Sculptmod", "Tab Coffee 05", "Tv Stand 01", "Haybale 03", "Ret Ml Liqshelfd", "Tablesaw 01", "Ret Ml Liqshelfa", "Ret 247 Sweetcount", "T Coffe Table", "Egg Clock 01", "Rock 4 Cl 1", "Rub Table 02", "T Coffe Table 02", "Patio Lounger1", "Patio Lounger1b", "Floorlamp A", "Paints Bench01", "Lit Floorlamp 13", "Table 08", "Table 08 Side", "Feeder1", "Feeder1 Cr", "Paint Stepl01", "Res Mbdresser", "Acc Plant Palm 01", "Res Tre Tree", "Res Mdchest Moved", "Ret Ml Liqshelfc", "Muscle Bench 05", "Res Fh Benchshort", "Lit Floorlamp 06", "Ret 247Shelves01", "Ret 247Shelves03", "Ret 247Shelves02", "Ret 247Shelves04", "Ret 247Shelves05", "Phonebox 03", "Ret Ml Partframe1", "Res Lest Bigscreen", "Res M Console", "Res M H Console", "Res M Urn", "Str Shelfwallm 01", "Apa P Apdlc Treadmill S", "Ret Windowair", "Pot Plant 05C", "Paint Stepl01b", "Ret Wind2", "Ret Window", "T Shirt Row 01", "Pot Plant 05A", "Tv Flat 01 Screen", "Rock 2 A", "Beach Parasol 03", "Ret Csr Tyresale", "Fib Plant 02", "Trailer Door Closed", "Trailer Door Open", "Corp Plants", "Str Sideboards 01", "Res D Sofa", "Ret Ps Flowers 02", "Coffin 02", "Coffin 02B", "Speaker 01", "Haybale 02", "Bkr Prop Weed Table 01B", "Ret Ml Tableb", "Ret Ml Tablec", "Skid Box 02", "Ret Ml Tablea", "Train Ticket 02", "Train Ticket 02 Tu", "Rock 3 F", "Tshirt Shelf 2A", "Tshirt Shelf 2B", "Tshirt Shelf 2C", "Rock 4 A", "Dog Cage 01", "Res Tre Plant", "Pizza Oven 01", "Table 02", "Couch Lg 02", "T Shirt Row 05L", "Ret Ml Liqshelfe", "Coffin 01", "Beach Parasol 08", "T Shirt Row 05R", "Wall Light 12", "Res Tre Sofa", "Res Tre Sofa Mess C", "Res Tre Sofa S", "Tre Sofa Mess C S", "Stn Sofa Daybed 01", "Res Tre Sofa Mess B", "Tre Sofa Mess B S", "Skid Tent Cloth", "Big Clock 01", "Lit Floorlamp 01", "Bathtub 01", "Dandy B", "Rock 3 J", "Bench 01B", "Bench 01C", "Ret Ml Fridge", "Studio Light 01", "Bush Ivy 01 Top", "Bush Ivy 02 Top", "Couch Sm 06", "Barbell 100Kg", "Barbell 10Kg", "Barbell 20Kg", "Barbell 30Kg", "Barbell 40Kg", "Barbell 50Kg", "Barbell 60Kg", "Barbell 80Kg", "Weight Bench 02", "Id2 20 Clock", "Beach Lg Stretch", "Res Tre Wdunitscuz", "Res Tre Woodunit", "Heist Cutscene Doorb", "Airhockey 01", "Res Tre Wardrobe", "Pot Plant Bh1", "Barbell 02", "Ret Fh Displayc", "Couch 01", "Bench 04", "Sglasses Stand 01", "Bush Med 01", "Weight Squat", "Skid Tent 01B", "Couch Lg 05", "Res Mdbed", "Ret Gs Glass01", "Heist Cutscene Doora", "Premier Fence 01", "Windmill1", "Bball Arcade 01", "Apa V Ilev Fh Heistdoor2", "Tv Flat 01", "Apa V Ilev Ss Door2", "Apa V Ilev Ss Door7", "Apa V Ilev Ss Door8", "Door 01", "Corp Hicksdoor", "Apa Heist Apart2 Door", "Hei Bankdoor New", "Strip Door 01", "Chem Grill", "Pot Plant 05B", "Aerial 01C", "Beach Parasol 02", "Parasol 04E", "Parasol Bh 48", "Acc Artwalll 01", "Acc Artwalll 02", "Acc Artwalll 03", "Apa P H Acc Artwalll 01", "Apa P H Acc Artwalll 02", "Apa P H Acc Artwalll 03", "Apa P H Acc Artwalll 04", "Sf P H Acc Artwalll 04", "Sum P H Acc Artwalll 04", "Res Fridgemoda", "Carcreeper", "Arcade 02", "Stn Sofa2seat 02", "Sglasses Stand 1B", "Res D Closetdoorl", "Res D Closetdoorr", "Res Mddresser", "Res Mddresser Off", "Res M Sidetable", "Res Mbath", "Beach Parasol 04", "Beach Parasol 09", "Bench 02", "Worklight 04B L1", "Bench 01A", "Beach Parasol 01", "Chall Lamp 01", "Chall Lamp 01N", "Muscle Bench 04", "Rock 1 E", "Ret Fh Doorframe", "Res J Sofa", "Road Memorial 01", "Pot Plant 04A", "Punch Bag L", "Rock 2 F", "Ff Shelves 01", "Hot Tub Coverd", "Hottub2", "Serv Cupboard 01", "Surf Board 02", "Surf Board 03", "Surf Board Ldn 02", "Surf Board Ldn 03", "Skid Tent 01", "Fridge 01", "Pighouse2", "Serv Gt Glass1", "Umpire 01", "Res Fh Floorlamp", "Res Mbbed", "Res Mbbed Mess", "Patio Heater 01", "Kino Light 01", "A Base Bars 01", "Beach Bars 02", "Wall Light 09D", "Skid Tent 03", "P Spider 01D", "Ff Counter 02", "Ff Counter 03", "P Spider 01A", "Wall Light 09A", "Corp Cabshelves01", "Corp Offshelf", "Corp Offshelfclo" }
+        local modes = _G.FreecamAttachModes or { "Full Box", "Wall", "Single", "Tour", "Rampe" }
         local total = #modes
         if rightArrow then
             local cur = _G.FreecamAttachModeIdx or 1
@@ -23003,7 +23085,7 @@ function Menu.Actions.HardLaunchPlayer()
             local returnCoords = cachedReturnCoords
 
             -- Activer Solo Session au début (une seule fois)
-            assert(Menu.Actions.AcquireFullInvisible('launch_hard'), 'Full Invisible indisponible')
+            assert(Menu.Actions.AcquireNormalSoloSession('launch_hard'), 'Session solo indisponible')
             Wait(150)
 
             if not seedBlocksInvisibility() then SetEntityVisible(myPed, true, false) end
@@ -23063,7 +23145,7 @@ function Menu.Actions.HardLaunchPlayer()
             end
 
             -- Couper la Solo Session quand on arrête
-            Menu.Actions.ReleaseFullInvisible('launch_hard')
+            Menu.Actions.ReleaseNormalSoloSession('launch_hard')
             ShowDynastyNotification("[ HARD LAUNCH ] OFF - Solo Session terminée")
         end)
 
@@ -23071,7 +23153,7 @@ function Menu.Actions.HardLaunchPlayer()
             
             pcall(function()
                 SetEntityVisible(PlayerPedId(), true, 0)
-                Menu.Actions.ReleaseFullInvisible('launch_hard')
+                Menu.Actions.ReleaseNormalSoloSession('launch_hard')
                 end)
         end
 
@@ -23091,7 +23173,7 @@ local function _launchAllOne(pid, tPed, soloMode)
     local myPed = PlayerPedId()
 
     if soloMode then
-        assert(Menu.Actions.AcquireFullInvisible('launch_all'), 'Full Invisible indisponible')
+        assert(Menu.Actions.AcquireNormalSoloSession('launch_all'), 'Session solo indisponible')
         Wait(60)
     end
 
@@ -23149,7 +23231,7 @@ local function _launchAllOne(pid, tPed, soloMode)
     end
 
     if soloMode then
-        Menu.Actions.ReleaseFullInvisible('launch_all')
+        Menu.Actions.ReleaseNormalSoloSession('launch_all')
         Wait(120) -- laisse les joueurs se re-streamer avant la cible suivante
     end
 end
@@ -23215,7 +23297,7 @@ function Menu.Actions.LaunchAll(solo)
         if not ok then  end
 
         -- Nettoyage final garanti
-        pcall(Menu.Actions.ReleaseFullInvisible, 'launch_all')
+        pcall(Menu.Actions.ReleaseNormalSoloSession, 'launch_all')
         local myPed = PlayerPedId()
         if DoesEntityExist(myPed) then
             pcall(DetachEntity, myPed, true, true)
@@ -26622,9 +26704,6 @@ function ExecuteMenuAction(menu, index, listOverride)
         elseif cchoice == "Rage Bot" then
             Menu.State.shootVisionActive = not Menu.State.shootVisionActive
             ShowDynastyNotification("Rage Bot: " .. (Menu.State.shootVisionActive and "ON" or "OFF"))
-        elseif cchoice == "Rapid Fire" then
-            Menu.State.rapidFireActive = not Menu.State.rapidFireActive
-            ShowDynastyNotification("Rapid Fire: " .. (Menu.State.rapidFireActive and "ON" or "OFF"))
         elseif cchoice == "Damage Boost" then
             Menu.State.damageBoostActive = not Menu.State.damageBoostActive
             ShowDynastyNotification("Damage Boost: " .. (Menu.State.damageBoostActive and "ON" or "OFF"))
@@ -27475,6 +27554,24 @@ function ExecuteMenuAction(menu, index, listOverride)
                     ShowDynastyNotification("[ CONFIG ] Annule")
                 end
             end)
+        elseif choice == "Associer une cle Lapsus..." then
+            Citizen.CreateThread(function()
+                local username = _G.MirageConfigUsername
+                if not username then
+                    ShowDynastyNotification("[ CONFIG ] Compte Lapsus indisponible")
+                    return
+                end
+                local code = Menu.Helpers.PromptKeyboardInput("Cle pour " .. username, "", 64, true)
+                if not code or code == "" then return end
+                local linked, configOrReason = Menu.Helpers.LinkConfigKey(username, code)
+                if not linked then
+                    ShowDynastyNotification("[ CONFIG ] Liaison refusee : " .. tostring(configOrReason))
+                    return
+                end
+                _G.AuthedCode = code
+                Menu.Helpers.ImportConfigProfiles(configOrReason)
+                ShowDynastyNotification("[ CONFIG ] Cle liee a " .. username)
+            end)
         elseif type(choice) == "string" then
             Menu.State.selectedProfileName = choice
             Menu.State.currentMenu = "CONFIG_OPTIONS"
@@ -28193,7 +28290,7 @@ CreateThread(function()
             _G.lapsusKeyStates = {}
             goto continue_keybind_loop
         end
-        if not _G.AuthDone or not Menu.State.menuEverOpened then
+        if not _G.AuthDone or not Menu.State.menuOpen then
             _G.lapsusKeyStates = {}
             goto continue_keybind_loop
         end
@@ -29789,22 +29886,9 @@ CreateThread(function()
         -- Appliquer la config reçue directement du /check ou local
         if not Menu.CloudConfigs then Menu.CloudConfigs = { profiles = {} } end
         if not Menu.CloudConfigs.profiles then Menu.CloudConfigs.profiles = {} end
+        Menu.Helpers.LoadConfig()
 
-        if luaConfig and luaConfig ~= "" then
-            local fn, loadErr = load("return " .. luaConfig)
-            if fn then
-                local ok, data = pcall(fn)
-                if ok and type(data) == "table" then
-                    if data.profiles then
-                        for k, v in pairs(data.profiles) do
-                            Menu.CloudConfigs.profiles[k] = v
-                        end
-                    else
-                        Menu.CloudConfigs.profiles["Default"] = luaConfig
-                    end
-                end
-            end
-        end
+        Menu.Helpers.ImportConfigProfiles(luaConfig)
 
         authenticated = true
     end
@@ -29812,7 +29896,22 @@ CreateThread(function()
     -- Verification primaire Lapsus, puis cle existante uniquement en secours.
     local lapsusUsername = primaryLapsusAuth()
     if lapsusUsername then
-        finalizeAuth(nil, lapsusUsername, {ok=true}, "")
+        _G.MirageConfigUsername = lapsusUsername
+        local profileCode, profileConfig = Menu.Helpers.ResolveLinkedConfigCode(lapsusUsername)
+        if not profileCode then profileCode = Menu.Helpers.GetLinkedConfigCode(lapsusUsername) or getSavedCode() end
+        profileConfig = profileConfig or ""
+        if profileCode and profileCode ~= "" then
+            local linked, configOrReason = Menu.Helpers.LinkConfigKey(lapsusUsername, profileCode)
+            if linked then
+                profileConfig = configOrReason
+            else
+                if not linked then
+                    ShowDynastyNotification("[ CONFIG ] Liaison refusee : " .. tostring(configOrReason))
+                    profileCode = nil
+                end
+            end
+        end
+        finalizeAuth(profileCode, lapsusUsername, {ok=true}, profileConfig)
     end
     local savedCode = not authenticated and getSavedCode() or nil
     if savedCode then
@@ -31855,7 +31954,8 @@ function Menu.Helpers.BuildNuiConfigInput()
     local input = _G.CustomInputState or {}
     return {active=_G._mirageNuiEnabled and _G.CustomInputActive==true and not Menu.State.isLoading,
         title=tostring(input.title or ''), confirm=input.confirm==true,
-        input=tostring(input.inputBuffer or ''), error=tostring(input.errorMsg or '')}
+        input=input.secret and string.rep('*', #tostring(input.inputBuffer or '')) or tostring(input.inputBuffer or ''),
+        secret=input.secret==true, error=tostring(input.errorMsg or '')}
 end
 function Menu.Helpers.BuildNuiGiveInput()
     local give=_G.GiveInputState or {}
@@ -31894,7 +31994,7 @@ Citizen.CreateThread(function()
         if escape then S.nuiLayoutEditing=false end
         if not wanted then S.nuiLayoutEditing=false end
         if wanted~=focused then
-            local ok,accepted=pcall(Lapsus.SetNuiFocus,'mirage_live_menu_v56',wanted)
+            local ok,accepted=pcall(Lapsus.SetNuiFocus,'mirage_live_menu_v57',wanted)
             focused=wanted and ok and accepted==true
             if wanted and not focused then
                 S.nuiLayoutEditing=false
@@ -31913,7 +32013,7 @@ local function send(action,value)
     local now=GetGameTimer()
     local previous=sentPackets[action]
     if previous and previous.body==body and now-previous.time<750 then return true end
-    local sent,accepted=pcall(Lapsus.SendNuiMessage,'mirage_live_menu_v56',body)
+    local sent,accepted=pcall(Lapsus.SendNuiMessage,'mirage_live_menu_v57',body)
     if sent and accepted==true and _G._mirageNuiEnabled then
         _G._mirageNuiUntil=now+1500
         sentPackets[action]={body=body,time=now}
@@ -31961,7 +32061,7 @@ Citizen.CreateThread(function()
                     
                 end
             end
-            local ok,accepted=pcall(Lapsus.CreateNui,'mirage_live_menu_v56',base..'/index-v56.html?transport=direct')
+            local ok,accepted=pcall(Lapsus.CreateNui,'mirage_live_menu_v57',base..'/index-v57.html?transport=direct')
             opened=ok and accepted==true
         end
         if opened and type(json)=='table' and type(json.encode)=='function' then
